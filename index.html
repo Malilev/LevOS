@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1f2937">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LEV OS">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>LEV OS</title>
+  
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { 
+      margin: 0; 
+      background: #111827; 
+      overscroll-behavior: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input, select, button { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useCallback, useMemo, useEffect } = React;
+
+    // ==================== DEFAULT BLOCKS ====================
+    const DEFAULT_BLOCKS = {
+      OP_1: { id: 'OP_1', name: '1 операция', emoji: '🏥', category: 'OP', color: '#E74C3C', duration: 180, minDur: 120, maxDur: 240 },
+      OP_2: { id: 'OP_2', name: '2 операции', emoji: '🏥🏥', category: 'OP', color: '#C0392B', duration: 360, minDur: 300, maxDur: 420 },
+      FAM: { id: 'FAM', name: 'Семья', emoji: '👨‍👩‍👧', category: 'SACRED', color: '#9B59B6', duration: 120, minDur: 60, maxDur: 240 },
+      MAYA_WALK: { id: 'MAYA_WALK', name: 'Прогулка Майя', emoji: '🚶', category: 'SACRED', color: '#8E44AD', duration: 90, minDur: 60, maxDur: 120 },
+      POLECHAT_LEGAL: { id: 'POLECHAT_LEGAL', name: 'PoleChat Legal', emoji: '⚖️', category: 'POLECHAT', color: '#3498DB', duration: 60, minDur: 30, maxDur: 180 },
+      POLECHAT_BIZDEV: { id: 'POLECHAT_BIZDEV', name: 'PoleChat BizDev', emoji: '🤝', category: 'POLECHAT', color: '#2980B9', duration: 60, minDur: 30, maxDur: 180 },
+      POLECHAT_PRODUCT: { id: 'POLECHAT_PRODUCT', name: 'PoleChat Product', emoji: '💻', category: 'POLECHAT', color: '#1F618D', duration: 90, minDur: 30, maxDur: 240 },
+      SOMALAB: { id: 'SOMALAB', name: 'SomaLab', emoji: '⚡', category: 'SOMALAB', color: '#E67E22', duration: 90, minDur: 30, maxDur: 240 },
+      SCIENCE_DEEP: { id: 'SCIENCE_DEEP', name: 'Наука Deep', emoji: '📝', category: 'SCIENCE', color: '#1ABC9C', duration: 180, minDur: 120, maxDur: 360 },
+      SCIENCE_LIGHT: { id: 'SCIENCE_LIGHT', name: 'Наука Light', emoji: '📄', category: 'SCIENCE', color: '#16A085', duration: 45, minDur: 30, maxDur: 90 },
+      LAB_DEEP: { id: 'LAB_DEEP', name: 'Лаб Deep', emoji: '🔬', category: 'LAB', color: '#9B59B6', duration: 180, minDur: 120, maxDur: 360 },
+      LAB_LIGHT: { id: 'LAB_LIGHT', name: 'Лаб Light', emoji: '📋', category: 'LAB', color: '#8E44AD', duration: 45, minDur: 30, maxDur: 90 },
+      PERSONAL: { id: 'PERSONAL', name: 'Личное', emoji: '🎯', category: 'PERSONAL', color: '#F39C12', duration: 60, minDur: 30, maxDur: 180 },
+      SPORT_FULL: { id: 'SPORT_FULL', name: 'Спорт+СПА', emoji: '🏋️🏊', category: 'CARE', color: '#2ECC71', duration: 120, minDur: 90, maxDur: 180 },
+      SPORT_QUICK: { id: 'SPORT_QUICK', name: 'Спорт', emoji: '🏃', category: 'CARE', color: '#27AE60', duration: 60, minDur: 30, maxDur: 90 },
+      POWER_NAP: { id: 'POWER_NAP', name: 'Power Nap', emoji: '💤', category: 'CARE', color: '#2ECC71', duration: 30, minDur: 20, maxDur: 45 },
+      NIGHT: { id: 'NIGHT', name: 'Ночь', emoji: '🌙', category: 'NIGHT', color: '#8E44AD', duration: 480, minDur: 300, maxDur: 540 },
+      BUFFER: { id: 'BUFFER', name: 'Буфер', emoji: '⏳', category: 'BUFFER', color: '#95A5A6', duration: 30, minDur: 30, maxDur: 60 },
+      FREE: { id: 'FREE', name: 'Свободное', emoji: '🎨', category: 'FREE', color: '#F1C40F', duration: 60, minDur: 30, maxDur: 180 },
+      CALL_POLECHAT: { id: 'CALL_POLECHAT', name: 'Звонок PoleChat', emoji: '📞', category: 'CALL', color: '#3498DB', duration: 90, minDur: 60, maxDur: 120, days: [1] },
+      CALL_SOMALAB: { id: 'CALL_SOMALAB', name: 'Звонок SomaLab', emoji: '📞', category: 'CALL', color: '#E67E22', duration: 60, minDur: 30, maxDur: 90, days: [1] },
+      CALL_SOMALAB_TECH: { id: 'CALL_SOMALAB_TECH', name: 'SomaLab Tech', emoji: '📞', category: 'CALL', color: '#D35400', duration: 60, minDur: 30, maxDur: 90, days: [4] },
+    };
+
+    const CATEGORIES = {
+      OP: 'Операции',
+      SACRED: 'Семья',
+      POLECHAT: 'PoleChat',
+      SOMALAB: 'SomaLab',
+      SCIENCE: 'Наука',
+      LAB: 'Лаборатория',
+      CARE: 'Спорт',
+      PERSONAL: 'Личное',
+      NIGHT: 'Ночь',
+      BUFFER: 'Буфер',
+      FREE: 'Свободное',
+      CALL: 'Звонки'
+    };
+
+    const DAYS_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+    const DAYS_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    const SLOT_HEIGHT = 32;
+
+    // Time slots
+    const TIME_SLOTS = [];
+    for (let i = 7; i < 24; i++) {
+      TIME_SLOTS.push({ hour: i, label: `${i}:00`, isHalf: false });
+      TIME_SLOTS.push({ hour: i + 0.5, label: `${i}:30`, isHalf: true });
+    }
+    for (let i = 0; i < 5; i++) {
+      TIME_SLOTS.push({ hour: i + 24, label: `${i}:00`, isHalf: false });
+      TIME_SLOTS.push({ hour: i + 24.5, label: `${i}:30`, isHalf: true });
+    }
+
+    const roundToHalfHour = (hour) => Math.round(hour * 2) / 2;
+
+    // ==================== STORAGE ====================
+    const storage = {
+      get: (key, defaultValue) => {
+        try {
+          const item = localStorage.getItem(`levos_${key}`);
+          return item ? JSON.parse(item) : defaultValue;
+        } catch (e) { 
+          console.log('Storage get error:', e);
+          return defaultValue; 
+        }
+      },
+      set: (key, value) => {
+        try {
+          localStorage.setItem(`levos_${key}`, JSON.stringify(value));
+          return true;
+        } catch (e) {
+          console.log('Storage set error:', e);
+          return false;
+        }
+      }
+    };
+
+    // ==================== SETTINGS SCREEN ====================
+    function SettingsScreen({ blocks, setBlocks, onClose }) {
+      const [editingBlock, setEditingBlock] = useState(null);
+      const [newBlock, setNewBlock] = useState(null);
+
+      const blocksByCategory = useMemo(() => {
+        const result = {};
+        Object.values(blocks).forEach(b => {
+          if (!result[b.category]) result[b.category] = [];
+          result[b.category].push(b);
+        });
+        return result;
+      }, [blocks]);
+
+      const saveBlock = (block) => {
+        const updated = { ...blocks, [block.id]: block };
+        setBlocks(updated);
+        storage.set('blocks', updated);
+        setEditingBlock(null);
+        setNewBlock(null);
+      };
+
+      const deleteBlock = (id) => {
+        if (!confirm('Удалить блок?')) return;
+        const updated = { ...blocks };
+        delete updated[id];
+        setBlocks(updated);
+        storage.set('blocks', updated);
+      };
+
+      const resetToDefaults = () => {
+        if (!confirm('Сбросить все блоки к значениям по умолчанию?')) return;
+        setBlocks(DEFAULT_BLOCKS);
+        storage.set('blocks', DEFAULT_BLOCKS);
+      };
+
+      const BlockEditor = ({ block, onSave, onCancel }) => {
+        const [form, setForm] = useState({ ...block });
+        
+        return (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm max-h-[90vh] overflow-auto">
+              <h3 className="text-lg font-bold mb-4 text-white">{block.id ? 'Редактировать' : 'Новый блок'}</h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-400">ID (уникальный, латиница)</label>
+                  <input
+                    type="text"
+                    value={form.id}
+                    onChange={e => setForm({...form, id: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '')})}
+                    disabled={!!block.id}
+                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white disabled:opacity-50"
+                    placeholder="MY_BLOCK"
+                  />
+                </div>
+                
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400">Emoji</label>
+                    <input
+                      type="text"
+                      value={form.emoji}
+                      onChange={e => setForm({...form, emoji: e.target.value})}
+                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white text-center text-xl"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400">Цвет</label>
+                    <input
+                      type="color"
+                      value={form.color}
+                      onChange={e => setForm({...form, color: e.target.value})}
+                      className="w-full h-10 bg-gray-700 rounded cursor-pointer"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-xs text-gray-400">Название</label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={e => setForm({...form, name: e.target.value})}
+                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
+                    placeholder="Мой блок"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-gray-400">Категория</label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm({...form, category: e.target.value})}
+                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
+                  >
+                    {Object.entries(CATEGORIES).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400">Длит. (мин)</label>
+                    <input
+                      type="number"
+                      value={form.duration}
+                      onChange={e => setForm({...form, duration: parseInt(e.target.value) || 30})}
+                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400">Мин</label>
+                    <input
+                      type="number"
+                      value={form.minDur}
+                      onChange={e => setForm({...form, minDur: parseInt(e.target.value) || 30})}
+                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400">Макс</label>
+                    <input
+                      type="number"
+                      value={form.maxDur}
+                      onChange={e => setForm({...form, maxDur: parseInt(e.target.value) || 480})}
+                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                </div>
+
+                {form.category === 'CALL' && (
+                  <div>
+                    <label className="text-xs text-gray-400">Дни недели (для звонков)</label>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {DAYS_SHORT.map((d, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            const days = form.days || [];
+                            const newDays = days.includes(i) 
+                              ? days.filter(x => x !== i)
+                              : [...days, i];
+                            setForm({...form, days: newDays});
+                          }}
+                          className={`px-3 py-1 rounded text-sm ${
+                            (form.days || []).includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 py-3 bg-gray-700 rounded-lg text-white"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={() => form.id && form.name && onSave(form)}
+                  disabled={!form.id || !form.name}
+                  className="flex-1 py-3 bg-green-600 rounded-lg text-white disabled:opacity-50"
+                >
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="fixed inset-0 bg-gray-900 z-40 overflow-auto text-white">
+          <header className="bg-gray-800 px-4 py-3 sticky top-0 z-10 flex items-center justify-between">
+            <h2 className="text-lg font-bold">⚙️ Настройки блоков</h2>
+            <button onClick={onClose} className="text-2xl w-10 h-10 flex items-center justify-center">✕</button>
+          </header>
+          
+          <div className="p-4 pb-20">
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setNewBlock({ id: '', name: '', emoji: '📌', category: 'PERSONAL', color: '#9B59B6', duration: 60, minDur: 30, maxDur: 180 })}
+                className="flex-1 py-3 bg-green-600 rounded-lg text-sm font-medium"
+              >
+                + Добавить блок
+              </button>
+              <button
+                onClick={resetToDefaults}
+                className="px-4 py-3 bg-red-600/50 rounded-lg text-sm"
+              >
+                🔄 Сброс
+              </button>
+            </div>
+            
+            {Object.entries(blocksByCategory).map(([cat, catBlocks]) => (
+              <div key={cat} className="mb-4">
+                <h3 className="text-sm text-gray-400 mb-2 font-medium">{CATEGORIES[cat] || cat}</h3>
+                <div className="space-y-1">
+                  {catBlocks.map(block => (
+                    <div
+                      key={block.id}
+                      className="flex items-center gap-2 p-3 rounded-lg"
+                      style={{ backgroundColor: `${block.color}33` }}
+                    >
+                      <span className="text-xl">{block.emoji}</span>
+                      <span className="flex-1 text-sm font-medium">{block.name}</span>
+                      <span className="text-xs text-gray-400">{block.duration}м</span>
+                      <button
+                        onClick={() => setEditingBlock(block)}
+                        className="px-3 py-1.5 bg-white/10 rounded text-sm"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => deleteBlock(block.id)}
+                        className="px-3 py-1.5 bg-red-500/30 rounded text-sm"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            
+            <div className="mt-8 p-4 bg-gray-800 rounded-lg">
+              <h3 className="font-medium mb-2">💡 Подсказки</h3>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Категория CALL — для регулярных звонков по дням</li>
+                <li>• Длительность кратна 30 минутам</li>
+                <li>• Данные сохраняются автоматически</li>
+              </ul>
+            </div>
+          </div>
+          
+          {(editingBlock || newBlock) && (
+            <BlockEditor
+              block={editingBlock || newBlock}
+              onSave={saveBlock}
+              onCancel={() => { setEditingBlock(null); setNewBlock(null); }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ==================== MAIN APP ====================
+    function LevOS() {
+      // Load from storage on init
+      const [blocks, setBlocks] = useState(() => storage.get('blocks', DEFAULT_BLOCKS));
+      const [schedules, setSchedules] = useState(() => storage.get('schedules', {}));
+      const [currentDate, setCurrentDate] = useState(new Date());
+      const [selectedBlock, setSelectedBlock] = useState(null);
+      const [draggedBlockId, setDraggedBlockId] = useState(null);
+      const [basketOpen, setBasketOpen] = useState(true);
+      const [showSettings, setShowSettings] = useState(false);
+
+      const dateKey = currentDate.toISOString().split('T')[0];
+      const dayOfWeek = currentDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const schedule = schedules[dateKey] || [];
+
+      // Auto-save schedules
+      useEffect(() => {
+        storage.set('schedules', schedules);
+      }, [schedules]);
+
+      // Tomorrow
+      const tomorrowDate = new Date(currentDate);
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrowKey = tomorrowDate.toISOString().split('T')[0];
+      const tomorrowSchedule = schedules[tomorrowKey] || [];
+
+      // NIGHT limit
+      const nightLimit = useMemo(() => {
+        const tomorrowFirstTask = tomorrowSchedule
+          .filter(b => !b.auto)
+          .sort((a, b) => a.startHour - b.startHour)[0];
+        
+        if (!tomorrowFirstTask) {
+          return { maxHour: 28, message: 'Завтра пусто → до 04:00', firstTask: null };
+        }
+        
+        const taskStart = tomorrowFirstTask.startHour;
+        const sleepNeeded = 8;
+        const sleepStart = taskStart - sleepNeeded;
+        const maxNightEnd = sleepStart;
+        const maxHour = maxNightEnd < 5 ? maxNightEnd + 24 : maxNightEnd;
+        const maxF = maxNightEnd < 0 
+          ? `${String(Math.floor(maxNightEnd + 24)).padStart(2, '0')}:00`
+          : `${String(Math.floor(maxNightEnd)).padStart(2, '0')}:00`;
+        
+        const taskName = blocks[tomorrowFirstTask.blockId]?.name || 'задача';
+        return { maxHour, message: `${taskName} ${taskStart}:00 → до ${maxF}`, firstTask: tomorrowFirstTask };
+      }, [tomorrowSchedule, blocks]);
+
+      // Sport info
+      const sportInfo = useMemo(() => {
+        if (isWeekend) return { available: true, text: 'Выходной 🎉' };
+        const op = schedule.find(b => b.blockId.startsWith('OP'));
+        if (!op) return { available: true, text: 'Вход до 17:00' };
+        const opStart = op.startHour;
+        const opEnd = opStart + op.duration / 60;
+        const windows = [];
+        if (opStart > 7.5) windows.push(`7:30-${Math.floor(opStart)}:00`);
+        if (opEnd < 17) windows.push(`${Math.ceil(opEnd)}:00-17:00`);
+        if (windows.length === 0) return { available: false, text: 'Нет окна' };
+        return { available: true, text: windows.join(' / ') };
+      }, [schedule, isWeekend]);
+
+      // Available calls for today
+      const availableCalls = useMemo(() => {
+        return Object.values(blocks).filter(b => b.category === 'CALL' && b.days?.includes(dayOfWeek));
+      }, [dayOfWeek, blocks]);
+
+      // Blocks by category (for basket)
+      const blocksByCategory = useMemo(() => {
+        const result = {};
+        Object.values(blocks).forEach(b => {
+          if (b.category === 'CALL' || b.category === 'BUFFER') return;
+          if (!result[b.category]) result[b.category] = [];
+          result[b.category].push(b);
+        });
+        return result;
+      }, [blocks]);
+
+      // Auto-fill when OP placed
+      const generateAutoBlocks = useCallback((opStart, opDuration) => {
+        const opEnd = opStart + opDuration / 60;
+        const result = [];
+        const ts = Date.now();
+        
+        // Buffer before OP
+        const bufferBefore = roundToHalfHour(opStart - 0.5);
+        if (bufferBefore >= 7) {
+          result.push({ id: `BUFFER_BEFORE-${ts}`, blockId: 'BUFFER', startHour: bufferBefore, duration: 30, auto: true, label: 'до ОП' });
+        }
+        
+        // Buffer after OP
+        const bufferAfter = roundToHalfHour(opEnd);
+        result.push({ id: `BUFFER_AFTER-${ts}`, blockId: 'BUFFER', startHour: bufferAfter, duration: 30, auto: true, label: 'после ОП' });
+        
+        // Family after buffer
+        const famStart = roundToHalfHour(bufferAfter + 0.5);
+        result.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 120, auto: true });
+        
+        // Maya walk if 14-17 free
+        if (!(opStart < 17 && opEnd > 14)) {
+          result.push({ id: `MAYA_WALK-${ts}`, blockId: 'MAYA_WALK', startHour: 15, duration: 90, auto: true });
+        }
+        
+        return result;
+      }, []);
+
+      const updateSchedule = useCallback((newSchedule) => {
+        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
+      }, [dateKey]);
+
+      const hasCollision = useCallback((newStart, newDuration, excludeIds = []) => {
+        const newEnd = newStart + newDuration / 60;
+        return schedule.some(b => {
+          if (excludeIds.includes(b.id)) return false;
+          const end = b.startHour + b.duration / 60;
+          return newStart < end && newEnd > b.startHour;
+        });
+      }, [schedule]);
+
+      const recalculateAutoBlocks = useCallback((currentSchedule, opBlock) => {
+        const withoutAuto = currentSchedule.filter(b => !b.auto);
+        const newAutoBlocks = generateAutoBlocks(opBlock.startHour, opBlock.duration);
+        return [...withoutAuto, ...newAutoBlocks];
+      }, [generateAutoBlocks]);
+
+      const selectBlock = useCallback((blockId) => {
+        setDraggedBlockId(null);
+        setSelectedBlock(selectedBlock === blockId ? null : blockId);
+      }, [selectedBlock]);
+
+      const placeBlock = useCallback((hour) => {
+        if (!selectedBlock) return;
+        const blockDef = blocks[selectedBlock];
+        if (!blockDef) return;
+        if (selectedBlock.startsWith('OP') && hour >= 21) return;
+        if (hasCollision(hour, blockDef.duration)) return;
+        
+        const newBlock = { id: `${selectedBlock}-${Date.now()}`, blockId: selectedBlock, startHour: hour, duration: blockDef.duration };
+        let newSchedule = [...schedule, newBlock];
+        
+        if (selectedBlock.startsWith('OP')) {
+          newSchedule = [...newSchedule, ...generateAutoBlocks(hour, blockDef.duration)];
+        }
+        
+        updateSchedule(newSchedule);
+        setSelectedBlock(null);
+      }, [selectedBlock, schedule, blocks, hasCollision, generateAutoBlocks, updateSchedule]);
+
+      const moveBlock = useCallback((blockInstanceId, newHour) => {
+        const block = schedule.find(b => b.id === blockInstanceId);
+        if (!block) return;
+        if (block.blockId.startsWith('OP') && newHour >= 21) return;
+        
+        const excludeIds = block.blockId.startsWith('OP') 
+          ? [blockInstanceId, ...schedule.filter(b => b.auto).map(b => b.id)]
+          : [blockInstanceId];
+        
+        if (hasCollision(newHour, block.duration, excludeIds)) return;
+        
+        let newSchedule = schedule.map(b => b.id === blockInstanceId ? { ...b, startHour: newHour } : b);
+        
+        if (block.blockId.startsWith('OP')) {
+          const movedOp = { ...block, startHour: newHour };
+          newSchedule = recalculateAutoBlocks(newSchedule, movedOp);
+        }
+        
+        updateSchedule(newSchedule);
+        setDraggedBlockId(null);
+      }, [schedule, hasCollision, recalculateAutoBlocks, updateSchedule]);
+
+      const resizeBlock = useCallback((blockInstanceId, delta) => {
+        const block = schedule.find(b => b.id === blockInstanceId);
+        if (!block) return;
+        
+        const def = blocks[block.blockId];
+        if (!def) return;
+        const newDuration = block.duration + delta;
+        
+        if (newDuration < (def.minDur || 30) || newDuration > (def.maxDur || 480)) return;
+        
+        const excludeIds = block.blockId.startsWith('OP') 
+          ? [blockInstanceId, ...schedule.filter(b => b.auto).map(b => b.id)]
+          : [blockInstanceId];
+        
+        if (delta > 0 && hasCollision(block.startHour, newDuration, excludeIds)) return;
+        
+        let newSchedule = schedule.map(b => b.id === blockInstanceId ? { ...b, duration: newDuration } : b);
+        
+        if (block.blockId.startsWith('OP')) {
+          const resizedOp = { ...block, duration: newDuration };
+          newSchedule = recalculateAutoBlocks(newSchedule, resizedOp);
+        }
+        
+        updateSchedule(newSchedule);
+      }, [schedule, blocks, hasCollision, recalculateAutoBlocks, updateSchedule]);
+
+      const removeBlock = useCallback((blockInstanceId) => {
+        const block = schedule.find(b => b.id === blockInstanceId);
+        let newSchedule = schedule.filter(b => b.id !== blockInstanceId);
+        if (block?.blockId.startsWith('OP')) {
+          newSchedule = newSchedule.filter(b => !b.auto);
+        }
+        updateSchedule(newSchedule);
+      }, [schedule, updateSchedule]);
+
+      const changeDay = (delta) => {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() + delta);
+        setCurrentDate(d);
+        setSelectedBlock(null);
+        setDraggedBlockId(null);
+      };
+
+      const goToToday = () => {
+        setCurrentDate(new Date());
+        setSelectedBlock(null);
+        setDraggedBlockId(null);
+      };
+
+      const getBlockAtSlot = (hour) => {
+        return schedule.find(b => {
+          const end = b.startHour + b.duration / 60;
+          return hour >= b.startHour && hour < end;
+        });
+      };
+
+      // Stats
+      const stats = useMemo(() => {
+        const calc = (cat) => schedule.filter(b => blocks[b.blockId]?.category === cat).reduce((s, b) => s + b.duration, 0);
+        return {
+          op: Math.round(calc('OP') / 60 * 10) / 10,
+          polechat: Math.round(calc('POLECHAT') / 60 * 10) / 10,
+          somalab: Math.round(calc('SOMALAB') / 60 * 10) / 10,
+          lab: Math.round(calc('LAB') / 60 * 10) / 10,
+          science: Math.round(calc('SCIENCE') / 60 * 10) / 10,
+        };
+      }, [schedule, blocks]);
+
+      // Render blocks on timeline
+      const renderBlocks = () => {
+        return schedule.map(block => {
+          const def = blocks[block.blockId];
+          if (!def) return null;
+          
+          const startSlotIndex = TIME_SLOTS.findIndex(s => s.hour === block.startHour);
+          if (startSlotIndex === -1) return null;
+          
+          const slotsSpanned = block.duration / 30;
+          const top = startSlotIndex * SLOT_HEIGHT;
+          const height = slotsSpanned * SLOT_HEIGHT - 2;
+          const isDragging = draggedBlockId === block.id;
+          
+          let displayName = def.name;
+          if (block.blockId === 'BUFFER' && block.label) displayName = `Буфер ${block.label}`;
+          
+          return (
+            <div
+              key={block.id}
+              className={`absolute left-12 right-2 rounded-lg flex flex-col justify-between p-1.5 cursor-pointer ${
+                isDragging ? 'ring-2 ring-blue-400 opacity-70 z-10' : ''
+              } ${def.category === 'CALL' ? 'border-2 border-dashed border-white/40' : ''}`}
+              style={{ top: `${top}px`, height: `${height}px`, backgroundColor: def.color, opacity: block.auto ? 0.8 : 1 }}
+              onClick={() => { setSelectedBlock(null); setDraggedBlockId(isDragging ? null : block.id); }}
+            >
+              <div className="flex items-center gap-1 overflow-hidden">
+                <span className="text-white/50">⋮⋮</span>
+                <span>{def.emoji}</span>
+                <span className="text-white text-xs font-medium truncate">{displayName}</span>
+                {block.auto && <span className="text-white/50 text-xs">(авто)</span>}
+              </div>
+              
+              {height >= 50 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 text-xs">{block.duration} мин</span>
+                  <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => resizeBlock(block.id, -30)} disabled={block.duration <= (def.minDur || 30)}
+                      className="w-7 h-7 flex items-center justify-center bg-white/20 rounded text-lg disabled:opacity-30">−</button>
+                    <button onClick={() => resizeBlock(block.id, 30)} disabled={block.duration >= (def.maxDur || 480)}
+                      className="w-7 h-7 flex items-center justify-center bg-white/20 rounded text-lg disabled:opacity-30">+</button>
+                    <button onClick={() => removeBlock(block.id)}
+                      className="w-7 h-7 flex items-center justify-center bg-red-500/40 rounded">×</button>
+                  </div>
+                </div>
+              )}
+              
+              {height < 50 && (
+                <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                  <span className="text-white/70 text-xs mr-auto">{block.duration}м</span>
+                  <button onClick={() => resizeBlock(block.id, -30)} disabled={block.duration <= (def.minDur || 30)}
+                    className="w-6 h-6 flex items-center justify-center bg-white/20 rounded text-sm disabled:opacity-30">−</button>
+                  <button onClick={() => resizeBlock(block.id, 30)} disabled={block.duration >= (def.maxDur || 480)}
+                    className="w-6 h-6 flex items-center justify-center bg-white/20 rounded text-sm disabled:opacity-30">+</button>
+                  <button onClick={() => removeBlock(block.id)}
+                    className="w-6 h-6 flex items-center justify-center bg-red-500/40 rounded text-sm">×</button>
+                </div>
+              )}
+            </div>
+          );
+        });
+      };
+
+      // Block button in basket
+      const BlockBtn = ({ blockId }) => {
+        const b = blocks[blockId];
+        if (!b) return null;
+        const sel = selectedBlock === blockId;
+        return (
+          <button
+            onClick={() => selectBlock(blockId)}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-all active:scale-95 ${sel ? 'ring-2 ring-white' : ''}`}
+            style={{ background: sel ? b.color : `${b.color}44`, borderLeft: `3px solid ${b.color}` }}
+          >
+            <span>{b.emoji}</span>
+            <span className="text-white truncate">{b.name}</span>
+          </button>
+        );
+      };
+
+      // Show settings
+      if (showSettings) {
+        return <SettingsScreen blocks={blocks} setBlocks={setBlocks} onClose={() => setShowSettings(false)} />;
+      }
+
+      return (
+        <div className="min-h-screen bg-gray-900 text-white pb-16">
+          {/* Header */}
+          <header className="bg-gray-800 px-3 py-2 sticky top-0 z-30">
+            <div className="flex items-center justify-between">
+              <button onClick={() => setShowSettings(true)} className="text-xl w-10 h-10 flex items-center justify-center">⚙️</button>
+              <div className="flex items-center">
+                <button onClick={() => changeDay(-1)} className="p-2 text-2xl">‹</button>
+                <button onClick={goToToday} className="text-center w-28">
+                  <div className="text-sm font-medium">{DAYS_FULL[dayOfWeek]}</div>
+                  <div className="text-xs text-gray-400">
+                    {currentDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                  </div>
+                </button>
+                <button onClick={() => changeDay(1)} className="p-2 text-2xl">›</button>
+              </div>
+              <span className="text-xl w-10 h-10 flex items-center justify-center">🦁</span>
+            </div>
+            
+            <div className="mt-2 flex gap-2 text-xs">
+              <div className="flex-1 px-2 py-1.5 rounded bg-purple-900/50 flex items-center gap-1">
+                <span>🌙</span><span className="truncate">{nightLimit.message}</span>
+              </div>
+              <div className={`px-2 py-1.5 rounded whitespace-nowrap ${sportInfo.available ? 'bg-green-900/50' : 'bg-red-900/50'}`}>
+                🏋️ {sportInfo.text}
+              </div>
+            </div>
+          </header>
+
+          {/* Selection indicator */}
+          {(selectedBlock || draggedBlockId) && (
+            <div className={`px-4 py-2 text-center text-sm sticky top-24 z-20 ${draggedBlockId ? 'bg-blue-800' : 'bg-green-800'}`}>
+              {draggedBlockId 
+                ? `Перемещение: ${blocks[schedule.find(b=>b.id===draggedBlockId)?.blockId]?.emoji} — тапни куда`
+                : `${blocks[selectedBlock]?.emoji} ${blocks[selectedBlock]?.name} — тапни на время`}
+            </div>
+          )}
+
+          {/* Basket */}
+          <div className="bg-gray-800/80 border-b border-gray-700">
+            <button onClick={() => setBasketOpen(!basketOpen)} className="w-full px-3 py-2 flex justify-between text-sm">
+              <span className="text-gray-400 font-semibold">БЛОКИ</span>
+              <span className="text-gray-500">{basketOpen ? '▲' : '▼'}</span>
+            </button>
+            
+            {basketOpen && (
+              <div className="px-3 pb-3 space-y-2 text-xs no-scrollbar" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+                {availableCalls.length > 0 && (
+                  <div>
+                    <span className="text-red-400">📞 Звонки сегодня</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">{availableCalls.map(c => <BlockBtn key={c.id} blockId={c.id} />)}</div>
+                  </div>
+                )}
+                {Object.entries(blocksByCategory).map(([cat, catBlocks]) => (
+                  <div key={cat}>
+                    <span className="text-gray-500">{CATEGORIES[cat]}</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {catBlocks.map(b => <BlockBtn key={b.id} blockId={b.id} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Timeline */}
+          <div className="relative" style={{ height: `${TIME_SLOTS.length * SLOT_HEIGHT}px` }}>
+            {TIME_SLOTS.map((slot, idx) => {
+              const isNight = slot.hour >= 24 || slot.hour < 5;
+              const isPastLimit = nightLimit.firstTask && slot.hour > nightLimit.maxHour;
+              const block = getBlockAtSlot(slot.hour);
+              const canPlace = (selectedBlock || draggedBlockId) && !block;
+              
+              return (
+                <div
+                  key={slot.hour}
+                  onClick={() => {
+                    if (draggedBlockId && !block) moveBlock(draggedBlockId, slot.hour);
+                    else if (selectedBlock && !block) placeBlock(slot.hour);
+                  }}
+                  className={`absolute left-0 right-0 flex items-center px-2 border-b border-gray-800/50 ${
+                    canPlace ? 'active:bg-green-900/30' : ''
+                  } ${isPastLimit && isNight ? 'bg-red-900/10' : ''}`}
+                  style={{ top: `${idx * SLOT_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}
+                >
+                  <div className={`w-10 text-xs ${
+                    isNight ? (isPastLimit ? 'text-red-400' : 'text-purple-400') : 
+                    slot.isHalf ? 'text-gray-600' : 'text-gray-500'
+                  }`}>
+                    {isNight && !slot.isHalf && '🌙'}
+                    {slot.label}
+                  </div>
+                </div>
+              );
+            })}
+            {renderBlocks()}
+          </div>
+
+          {/* Stats */}
+          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 px-2 py-2 z-20">
+            <div className="flex justify-around text-center text-xs">
+              <div><div className="text-base font-bold text-red-400">{stats.op || '—'}</div><div className="text-gray-500">🏥</div></div>
+              <div><div className="text-base font-bold text-blue-400">{stats.polechat || '—'}</div><div className="text-gray-500">💼</div></div>
+              <div><div className="text-base font-bold text-orange-400">{stats.somalab || '—'}</div><div className="text-gray-500">⚡</div></div>
+              <div><div className="text-base font-bold text-purple-400">{stats.lab || '—'}</div><div className="text-gray-500">🔬</div></div>
+              <div><div className="text-base font-bold text-teal-400">{stats.science || '—'}</div><div className="text-gray-500">📝</div></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Mount app
+    ReactDOM.createRoot(document.getElementById('root')).render(<LevOS />);
+  </script>
+</body>
+</html>
