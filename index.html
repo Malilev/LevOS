@@ -2,14 +2,12 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LEV OS">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <title>LEV OS</title>
+  <meta name="apple-mobile-web-app-title" content="LEV OS 2.0">
+  <title>🦁 LEV OS 2.0</title>
   
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -18,797 +16,1063 @@
   
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { 
-      margin: 0; 
-      background: #111827; 
-      overscroll-behavior: none;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+    body { margin: 0; background: #111827; overscroll-behavior: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    input, select, button { font-family: inherit; }
+    input, select, button, textarea { font-family: inherit; }
+    .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+    .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+    .timeline-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .timeline-scroll::-webkit-scrollbar-track { background: #1f2937; }
+    .timeline-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   
   <script type="text/babel">
-    const { useState, useCallback, useMemo, useEffect } = React;
+    const { useState, useEffect, useMemo, useCallback } = React;
 
-    // ==================== DEFAULT BLOCKS ====================
-    const DEFAULT_BLOCKS = {
-      OP_1: { id: 'OP_1', name: '1 операция', emoji: '🏥', category: 'OP', color: '#E74C3C', duration: 180, minDur: 120, maxDur: 240 },
-      OP_2: { id: 'OP_2', name: '2 операции', emoji: '🏥🏥', category: 'OP', color: '#C0392B', duration: 360, minDur: 300, maxDur: 420 },
-      FAM: { id: 'FAM', name: 'Семья', emoji: '👨‍👩‍👧', category: 'SACRED', color: '#9B59B6', duration: 120, minDur: 60, maxDur: 240 },
-      MAYA_WALK: { id: 'MAYA_WALK', name: 'Прогулка Майя', emoji: '🚶', category: 'SACRED', color: '#8E44AD', duration: 90, minDur: 60, maxDur: 120 },
-      POLECHAT_LEGAL: { id: 'POLECHAT_LEGAL', name: 'PoleChat Legal', emoji: '⚖️', category: 'POLECHAT', color: '#3498DB', duration: 60, minDur: 30, maxDur: 180 },
-      POLECHAT_BIZDEV: { id: 'POLECHAT_BIZDEV', name: 'PoleChat BizDev', emoji: '🤝', category: 'POLECHAT', color: '#2980B9', duration: 60, minDur: 30, maxDur: 180 },
-      POLECHAT_PRODUCT: { id: 'POLECHAT_PRODUCT', name: 'PoleChat Product', emoji: '💻', category: 'POLECHAT', color: '#1F618D', duration: 90, minDur: 30, maxDur: 240 },
-      SOMALAB: { id: 'SOMALAB', name: 'SomaLab', emoji: '⚡', category: 'SOMALAB', color: '#E67E22', duration: 90, minDur: 30, maxDur: 240 },
-      SCIENCE_DEEP: { id: 'SCIENCE_DEEP', name: 'Наука Deep', emoji: '📝', category: 'SCIENCE', color: '#1ABC9C', duration: 180, minDur: 120, maxDur: 360 },
-      SCIENCE_LIGHT: { id: 'SCIENCE_LIGHT', name: 'Наука Light', emoji: '📄', category: 'SCIENCE', color: '#16A085', duration: 45, minDur: 30, maxDur: 90 },
-      LAB_DEEP: { id: 'LAB_DEEP', name: 'Лаб Deep', emoji: '🔬', category: 'LAB', color: '#9B59B6', duration: 180, minDur: 120, maxDur: 360 },
-      LAB_LIGHT: { id: 'LAB_LIGHT', name: 'Лаб Light', emoji: '📋', category: 'LAB', color: '#8E44AD', duration: 45, minDur: 30, maxDur: 90 },
-      PERSONAL: { id: 'PERSONAL', name: 'Личное', emoji: '🎯', category: 'PERSONAL', color: '#F39C12', duration: 60, minDur: 30, maxDur: 180 },
-      SPORT_FULL: { id: 'SPORT_FULL', name: 'Спорт+СПА', emoji: '🏋️🏊', category: 'CARE', color: '#2ECC71', duration: 120, minDur: 90, maxDur: 180 },
-      SPORT_QUICK: { id: 'SPORT_QUICK', name: 'Спорт', emoji: '🏃', category: 'CARE', color: '#27AE60', duration: 60, minDur: 30, maxDur: 90 },
-      POWER_NAP: { id: 'POWER_NAP', name: 'Power Nap', emoji: '💤', category: 'CARE', color: '#2ECC71', duration: 30, minDur: 20, maxDur: 45 },
-      NIGHT: { id: 'NIGHT', name: 'Ночь', emoji: '🌙', category: 'NIGHT', color: '#8E44AD', duration: 480, minDur: 300, maxDur: 540 },
-      BUFFER: { id: 'BUFFER', name: 'Буфер', emoji: '⏳', category: 'BUFFER', color: '#95A5A6', duration: 30, minDur: 30, maxDur: 60 },
-      FREE: { id: 'FREE', name: 'Свободное', emoji: '🎨', category: 'FREE', color: '#F1C40F', duration: 60, minDur: 30, maxDur: 180 },
-      CALL_POLECHAT: { id: 'CALL_POLECHAT', name: 'Звонок PoleChat', emoji: '📞', category: 'CALL', color: '#3498DB', duration: 90, minDur: 60, maxDur: 120, days: [1] },
-      CALL_SOMALAB: { id: 'CALL_SOMALAB', name: 'Звонок SomaLab', emoji: '📞', category: 'CALL', color: '#E67E22', duration: 60, minDur: 30, maxDur: 90, days: [1] },
-      CALL_SOMALAB_TECH: { id: 'CALL_SOMALAB_TECH', name: 'SomaLab Tech', emoji: '📞', category: 'CALL', color: '#D35400', duration: 60, minDur: 30, maxDur: 90, days: [4] },
+    const storage = {
+      get: (key, def) => { try { const item = localStorage.getItem(`levos2_${key}`); return item ? JSON.parse(item) : def; } catch { return def; } },
+      set: (key, value) => { try { localStorage.setItem(`levos2_${key}`, JSON.stringify(value)); } catch {} }
     };
 
-    const CATEGORIES = {
-      OP: 'Операции',
-      SACRED: 'Семья',
-      POLECHAT: 'PoleChat',
-      SOMALAB: 'SomaLab',
-      SCIENCE: 'Наука',
-      LAB: 'Лаборатория',
-      CARE: 'Спорт',
-      PERSONAL: 'Личное',
-      NIGHT: 'Ночь',
-      BUFFER: 'Буфер',
-      FREE: 'Свободное',
-      CALL: 'Звонки'
-    };
-
-    const DAYS_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-    const DAYS_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    const SLOT_HEIGHT = 32;
-
-    // Time slots
+    const SLOT_HEIGHT = 18;
     const TIME_SLOTS = [];
-    for (let i = 7; i < 24; i++) {
-      TIME_SLOTS.push({ hour: i, label: `${i}:00`, isHalf: false });
-      TIME_SLOTS.push({ hour: i + 0.5, label: `${i}:30`, isHalf: true });
-    }
-    for (let i = 0; i < 5; i++) {
-      TIME_SLOTS.push({ hour: i + 24, label: `${i}:00`, isHalf: false });
-      TIME_SLOTS.push({ hour: i + 24.5, label: `${i}:30`, isHalf: true });
-    }
+    for (let i = 7; i < 24; i++) { TIME_SLOTS.push({ hour: i, label: `${i}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true }); }
+    for (let i = 0; i < 4; i++) { TIME_SLOTS.push({ hour: i + 24, label: `${i}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 24.5, label: '', isHalf: true }); }
 
     const roundToHalfHour = (hour) => Math.round(hour * 2) / 2;
 
-    // ==================== STORAGE ====================
-    const storage = {
-      get: (key, defaultValue) => {
-        try {
-          const item = localStorage.getItem(`levos_${key}`);
-          return item ? JSON.parse(item) : defaultValue;
-        } catch (e) { 
-          console.log('Storage get error:', e);
-          return defaultValue; 
-        }
-      },
-      set: (key, value) => {
-        try {
-          localStorage.setItem(`levos_${key}`, JSON.stringify(value));
-          return true;
-        } catch (e) {
-          console.log('Storage set error:', e);
-          return false;
-        }
-      }
+    const CATEGORIES = {
+      OP: { name: 'Операции', color: '#EF4444' },
+      SACRED: { name: 'Семья', color: '#A855F7' },
+      POLECHAT: { name: 'Полечат', color: '#3B82F6' },
+      SOMALAB: { name: 'Сомалаб', color: '#F97316' },
+      LAB: { name: 'Лаборатория', color: '#8B5CF6' },
+      CARE: { name: 'Забота', color: '#22C55E' },
+      BUFFER: { name: 'Буфер', color: '#6B7280' },
+      NIGHT: { name: 'Ночь', color: '#6366F1' },
+      FREE: { name: 'Свободное', color: '#EAB308' },
     };
 
-    // ==================== SETTINGS SCREEN ====================
-    function SettingsScreen({ blocks, setBlocks, onClose }) {
-      const [editingBlock, setEditingBlock] = useState(null);
-      const [newBlock, setNewBlock] = useState(null);
+    const DEFAULT_BLOCKS = {
+      OP_1: { id: 'OP_1', name: '1 операция', emoji: '🏥', category: 'OP', color: '#EF4444', duration: 180, minDur: 120, maxDur: 240 },
+      OP_2: { id: 'OP_2', name: '2 операции', emoji: '🏥🏥', category: 'OP', color: '#DC2626', duration: 300, minDur: 240, maxDur: 420 },
+      OP_3: { id: 'OP_3', name: '3 операции', emoji: '🏥🏥🏥', category: 'OP', color: '#B91C1C', duration: 420, minDur: 360, maxDur: 540 },
+      BUFFER: { id: 'BUFFER', name: 'Буфер', emoji: '⏳', category: 'BUFFER', color: '#6B7280', duration: 30, minDur: 15, maxDur: 60 },
+      ROAD: { id: 'ROAD', name: 'Дорога', emoji: '🚶', category: 'BUFFER', color: '#4B5563', duration: 25, minDur: 20, maxDur: 40 },
+      FAM: { id: 'FAM', name: '50 мин Май', emoji: '👨‍👩‍👧', category: 'SACRED', color: '#A855F7', duration: 50, minDur: 30, maxDur: 120 },
+      WALK: { id: 'WALK', name: 'Прогулка Май', emoji: '🚶‍♂️', category: 'SACRED', color: '#9333EA', duration: 90, minDur: 60, maxDur: 120 },
+      POLECHAT: { id: 'POLECHAT', name: 'Полечат', emoji: '💼', category: 'POLECHAT', color: '#3B82F6', duration: 120, minDur: 30, maxDur: 300 },
+      CALL_P: { id: 'CALL_P', name: 'Звонок Полечат', emoji: '📞💼', category: 'POLECHAT', color: '#2563EB', duration: 60, minDur: 30, maxDur: 90 },
+      SOMALAB: { id: 'SOMALAB', name: 'Сомалаб', emoji: '⚡', category: 'SOMALAB', color: '#F97316', duration: 90, minDur: 30, maxDur: 180 },
+      CALL_S: { id: 'CALL_S', name: 'Звонок Сомалаб', emoji: '📞⚡', category: 'SOMALAB', color: '#EA580C', duration: 60, minDur: 30, maxDur: 90 },
+      LAB: { id: 'LAB', name: 'Лаборатория', emoji: '🔬', category: 'LAB', color: '#8B5CF6', duration: 120, minDur: 60, maxDur: 240 },
+      SPORT: { id: 'SPORT', name: 'Спорт', emoji: '🏋️', category: 'CARE', color: '#22C55E', duration: 90, minDur: 60, maxDur: 150 },
+      SPORT_SPA: { id: 'SPORT_SPA', name: 'Спорт+СПА', emoji: '🏋️🧖', category: 'CARE', color: '#16A34A', duration: 150, minDur: 120, maxDur: 180 },
+      NAP: { id: 'NAP', name: 'Power Nap', emoji: '💤', category: 'CARE', color: '#14B8A6', duration: 30, minDur: 20, maxDur: 45 },
+      SLEEP: { id: 'SLEEP', name: 'Сон', emoji: '😴', category: 'NIGHT', color: '#6366F1', duration: 480, minDur: 360, maxDur: 540 },
+      HYPER: { id: 'HYPER', name: 'Гиперфокус', emoji: '🔥', category: 'FREE', color: '#F59E0B', duration: 180, minDur: 120, maxDur: 360 },
+      FREE: { id: 'FREE', name: 'Свободное', emoji: '🎨', category: 'FREE', color: '#EAB308', duration: 60, minDur: 30, maxDur: 180 },
+    };
 
-      const blocksByCategory = useMemo(() => {
-        const result = {};
-        Object.values(blocks).forEach(b => {
-          if (!result[b.category]) result[b.category] = [];
-          result[b.category].push(b);
-        });
-        return result;
-      }, [blocks]);
+    const CONTEXTS = {
+      POLECHAT: { name: 'Полечат', color: '#3B82F6', emoji: '💼', blockId: 'POLECHAT' },
+      SOMALAB: { name: 'Сомалаб', color: '#F97316', emoji: '⚡', blockId: 'SOMALAB' },
+      LAB: { name: 'Лаборатория', color: '#8B5CF6', emoji: '🔬', blockId: 'LAB' },
+      FAMILY: { name: 'Семья', color: '#22C55E', emoji: '👨‍👩‍👧', blockId: 'FAM' },
+    };
 
-      const saveBlock = (block) => {
-        const updated = { ...blocks, [block.id]: block };
-        setBlocks(updated);
-        storage.set('blocks', updated);
-        setEditingBlock(null);
-        setNewBlock(null);
+    const DEFAULT_WEEK_CONTEXTS = {
+      0: 'FAMILY', // Вс
+      1: 'POLECHAT', // Пн
+      2: 'POLECHAT', // Вт
+      3: 'POLECHAT', // Ср
+      4: 'LAB', // Чт
+      5: 'SOMALAB', // Пт
+      6: 'FAMILY', // Сб
+    };
+
+    const SCENARIOS = {
+      1: { name: '1-й', desc: 'к 9:00', wakeUp: 7, opStart: 9 },
+      2: { name: '2-й', desc: 'к 10-11', wakeUp: 8, opStart: 10.5, homeWindow: { start: 8.5, dur: 60 } },
+      3: { name: '3-й', desc: 'к 12-15', wakeUp: 10.5, opStart: 14, homeWindow: { start: 11.5, dur: 150 } },
+      4: { name: '4+', desc: '>15:00', wakeUp: 11.5, opStart: 17, homeWindow: { start: 12.5, dur: 180 }, canGym: true },
+      w: { name: '🏠', desc: 'выходной', wakeUp: 11, isWeekend: true },
+    };
+
+    const PROJECTS = {
+      POLECHAT: { name: 'Полечат', color: '#3B82F6', emoji: '💼' },
+      SOMALAB: { name: 'Сомалаб', color: '#F97316', emoji: '⚡' },
+      LAB: { name: 'Лаб', color: '#8B5CF6', emoji: '🔬' },
+      FAMILY: { name: 'Семья', color: '#A855F7', emoji: '👨‍👩‍👧' },
+      PERSONAL: { name: 'Личное', color: '#EAB308', emoji: '🎯' },
+    };
+
+    // Динамическая генерация триггеров на основе сценария
+    const getTriggers = (scenario, dayOfWeek, context) => {
+      const base = {
+        morning: { title: '🌅 Утро', items: [
+          { key: 'm1', event: 'Встал', action: 'зубы' },
+          { key: 'm2', event: 'Зубы', action: 'витамины' },
+          { key: 'm3', event: 'Витамины', action: 'записка' },
+        ]},
+        road: { title: '🚶 Дорога', items: [
+          { key: 'r1', event: 'Вышел', action: 'режим?' },
+          { key: 'r2', event: 'ВОССТ', action: 'YouTube' },
+          { key: 'r3', event: 'РЕАКТИВ', action: 'отвечаю' },
+          { key: 'r4', event: 'АТАКА', action: 'пишу' },
+        ]},
+        hospital: { title: '🏥 ОП', items: [
+          { key: 'h1', event: '30м', action: 'реактив' },
+          { key: 'h2', event: '60м', action: '+атаки' },
+          { key: 'h3', event: '120м+', action: 'глубоко' },
+          { key: 'h4', event: 'Вышел', action: '"еду"' },
+        ]},
+        evening: { title: '🌙 Вечер', items: [
+          { key: 'e1', event: '50м✓', action: 'задача' },
+          { key: 'e2', event: 'YT?', action: '1 дело' },
+          { key: 'e3', event: 'Прилетело', action: 'записать' },
+        ]},
+        sleep: { title: '😴 Сон', items: [
+          { key: 's1', event: 'Ложусь', action: '"завтра"' },
+          { key: 's2', event: 'Записал', action: 'зубы' },
+        ]},
       };
 
-      const deleteBlock = (id) => {
-        if (!confirm('Удалить блок?')) return;
-        const updated = { ...blocks };
-        delete updated[id];
-        setBlocks(updated);
-        storage.set('blocks', updated);
-      };
+      // Добавляем специфичные триггеры по сценарию
+      if (scenario === '3' || scenario === '4') {
+        base.morning.items.push({ key: 'm_big', event: '⭐', action: 'большое окно!' });
+        base.morning.items.push({ key: 'm_deep', event: 'Окно', action: `работа ${CONTEXTS[context]?.name || ''}` });
+      }
 
-      const resetToDefaults = () => {
-        if (!confirm('Сбросить все блоки к значениям по умолчанию?')) return;
-        setBlocks(DEFAULT_BLOCKS);
-        storage.set('blocks', DEFAULT_BLOCKS);
-      };
+      if (scenario === '4') {
+        base.morning.items.push({ key: 'm_gym', event: 'ОП <15:00', action: 'можно в зал!' });
+      }
 
-      const BlockEditor = ({ block, onSave, onCancel }) => {
-        const [form, setForm] = useState({ ...block });
-        
-        return (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm max-h-[90vh] overflow-auto">
-              <h3 className="text-lg font-bold mb-4 text-white">{block.id ? 'Редактировать' : 'Новый блок'}</h3>
-              
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-gray-400">ID (уникальный, латиница)</label>
-                  <input
-                    type="text"
-                    value={form.id}
-                    onChange={e => setForm({...form, id: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '')})}
-                    disabled={!!block.id}
-                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white disabled:opacity-50"
-                    placeholder="MY_BLOCK"
-                  />
-                </div>
-                
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400">Emoji</label>
-                    <input
-                      type="text"
-                      value={form.emoji}
-                      onChange={e => setForm({...form, emoji: e.target.value})}
-                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white text-center text-xl"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400">Цвет</label>
-                    <input
-                      type="color"
-                      value={form.color}
-                      onChange={e => setForm({...form, color: e.target.value})}
-                      className="w-full h-10 bg-gray-700 rounded cursor-pointer"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="text-xs text-gray-400">Название</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={e => setForm({...form, name: e.target.value})}
-                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
-                    placeholder="Мой блок"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-gray-400">Категория</label>
-                  <select
-                    value={form.category}
-                    onChange={e => setForm({...form, category: e.target.value})}
-                    className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
-                  >
-                    {Object.entries(CATEGORIES).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400">Длит. (мин)</label>
-                    <input
-                      type="number"
-                      value={form.duration}
-                      onChange={e => setForm({...form, duration: parseInt(e.target.value) || 30})}
-                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400">Мин</label>
-                    <input
-                      type="number"
-                      value={form.minDur}
-                      onChange={e => setForm({...form, minDur: parseInt(e.target.value) || 30})}
-                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400">Макс</label>
-                    <input
-                      type="number"
-                      value={form.maxDur}
-                      onChange={e => setForm({...form, maxDur: parseInt(e.target.value) || 480})}
-                      className="w-full bg-gray-700 rounded px-3 py-2 text-sm text-white"
-                    />
-                  </div>
-                </div>
+      // Вторник/Четверг — офис
+      if (dayOfWeek === 2 || dayOfWeek === 4) {
+        base.hospital.items.push({ key: 'h_office', event: 'После ОП', action: 'офис' });
+      }
 
-                {form.category === 'CALL' && (
-                  <div>
-                    <label className="text-xs text-gray-400">Дни недели (для звонков)</label>
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {DAYS_SHORT.map((d, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => {
-                            const days = form.days || [];
-                            const newDays = days.includes(i) 
-                              ? days.filter(x => x !== i)
-                              : [...days, i];
-                            setForm({...form, days: newDays});
-                          }}
-                          className={`px-3 py-1 rounded text-sm ${
-                            (form.days || []).includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
-                          }`}
-                        >
-                          {d}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex gap-2 mt-6">
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="flex-1 py-3 bg-gray-700 rounded-lg text-white"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  onClick={() => form.id && form.name && onSave(form)}
-                  disabled={!form.id || !form.name}
-                  className="flex-1 py-3 bg-green-600 rounded-lg text-white disabled:opacity-50"
-                >
-                  Сохранить
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      };
+      // Выходной
+      if (scenario === 'w') {
+        base.morning = { title: '🌅 Утро выходного', items: [
+          { key: 'wm1', event: 'Встал', action: 'зубы' },
+          { key: 'wm2', event: 'Зубы', action: 'витамины' },
+          { key: 'wm3', event: 'Утро', action: 'семья' },
+        ]};
+        base.road = { title: '👨‍👩‍👧 День', items: [
+          { key: 'wd1', event: '~14:00', action: 'прогулка с Май' },
+          { key: 'wd2', event: 'Свободно', action: 'спорт' },
+        ]};
+        delete base.hospital;
+      }
 
-      return (
-        <div className="fixed inset-0 bg-gray-900 z-40 overflow-auto text-white">
-          <header className="bg-gray-800 px-4 py-3 sticky top-0 z-10 flex items-center justify-between">
-            <h2 className="text-lg font-bold">⚙️ Настройки блоков</h2>
-            <button onClick={onClose} className="text-2xl w-10 h-10 flex items-center justify-center">✕</button>
-          </header>
-          
-          <div className="p-4 pb-20">
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setNewBlock({ id: '', name: '', emoji: '📌', category: 'PERSONAL', color: '#9B59B6', duration: 60, minDur: 30, maxDur: 180 })}
-                className="flex-1 py-3 bg-green-600 rounded-lg text-sm font-medium"
-              >
-                + Добавить блок
-              </button>
-              <button
-                onClick={resetToDefaults}
-                className="px-4 py-3 bg-red-600/50 rounded-lg text-sm"
-              >
-                🔄 Сброс
-              </button>
-            </div>
-            
-            {Object.entries(blocksByCategory).map(([cat, catBlocks]) => (
-              <div key={cat} className="mb-4">
-                <h3 className="text-sm text-gray-400 mb-2 font-medium">{CATEGORIES[cat] || cat}</h3>
-                <div className="space-y-1">
-                  {catBlocks.map(block => (
-                    <div
-                      key={block.id}
-                      className="flex items-center gap-2 p-3 rounded-lg"
-                      style={{ backgroundColor: `${block.color}33` }}
-                    >
-                      <span className="text-xl">{block.emoji}</span>
-                      <span className="flex-1 text-sm font-medium">{block.name}</span>
-                      <span className="text-xs text-gray-400">{block.duration}м</span>
-                      <button
-                        onClick={() => setEditingBlock(block)}
-                        className="px-3 py-1.5 bg-white/10 rounded text-sm"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => deleteBlock(block.id)}
-                        className="px-3 py-1.5 bg-red-500/30 rounded text-sm"
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-            
-            <div className="mt-8 p-4 bg-gray-800 rounded-lg">
-              <h3 className="font-medium mb-2">💡 Подсказки</h3>
-              <ul className="text-sm text-gray-400 space-y-1">
-                <li>• Категория CALL — для регулярных звонков по дням</li>
-                <li>• Длительность кратна 30 минутам</li>
-                <li>• Данные сохраняются автоматически</li>
-              </ul>
-            </div>
-          </div>
-          
-          {(editingBlock || newBlock) && (
-            <BlockEditor
-              block={editingBlock || newBlock}
-              onSave={saveBlock}
-              onCancel={() => { setEditingBlock(null); setNewBlock(null); }}
-            />
-          )}
-        </div>
-      );
-    }
+      // Воскресенье — отчёт
+      if (dayOfWeek === 0) {
+        base.evening.items.push({ key: 'e_report', event: '21:00', action: 'отчёт инвестору' });
+        base.evening.items.push({ key: 'e_review', event: 'После', action: 'обзор триггеров' });
+      }
 
-    // ==================== MAIN APP ====================
-    function LevOS() {
-      // Load from storage on init
+      return base;
+    };
+
+    const genId = () => Math.random().toString(36).substr(2, 9);
+    const formatDate = (d) => d.toISOString().split('T')[0];
+
+    const LevOS = () => {
+      const [tab, setTab] = useState('plan');
       const [blocks, setBlocks] = useState(() => storage.get('blocks', DEFAULT_BLOCKS));
       const [schedules, setSchedules] = useState(() => storage.get('schedules', {}));
-      const [currentDate, setCurrentDate] = useState(new Date());
+      const [weekContexts, setWeekContexts] = useState(() => storage.get('weekContexts', DEFAULT_WEEK_CONTEXTS));
+      const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d; });
       const [selectedBlock, setSelectedBlock] = useState(null);
-      const [draggedBlockId, setDraggedBlockId] = useState(null);
-      const [basketOpen, setBasketOpen] = useState(true);
-      const [showSettings, setShowSettings] = useState(false);
+      const [movingBlock, setMovingBlock] = useState(null);
+      const [goals, setGoals] = useState(() => storage.get('goals', []));
+      const [brainDump, setBrainDump] = useState(() => storage.get('brainDump', []));
+      const [checkedTriggers, setCheckedTriggers] = useState(() => storage.get('triggers', {}));
+      const [weekFocus, setWeekFocus] = useState(() => storage.get('weekFocus', ''));
+      const [metrics, setMetrics] = useState(() => storage.get('metrics', {
+        POLECHAT: { contacts: 0, pilots: 0, legal: 0 },
+        LAB: { grants: 0, publications: 0, talks: 0 },
+        SOMALAB: { revenue: '', b2cProgress: '' },
+        PERSONAL: { workouts: 0, maiTime: false }
+      }));
+      const [showBlockEditor, setShowBlockEditor] = useState(null);
+      const [showScenarioModal, setShowScenarioModal] = useState(null); // { dateKey, dayOfWeek }
+      const [newGoalText, setNewGoalText] = useState('');
+      const [newGoalProject, setNewGoalProject] = useState('');
+      const [newGoalPeriod, setNewGoalPeriod] = useState('');
+      const [newDumpText, setNewDumpText] = useState('');
+      const [newDumpProject, setNewDumpProject] = useState('');
+      const [dumpFilter, setDumpFilter] = useState('');
+      const [goalsFilter, setGoalsFilter] = useState('');
+      const [todayScenario, setTodayScenario] = useState(() => storage.get('todayScenario', { date: '', scenario: '' }));
 
-      const dateKey = currentDate.toISOString().split('T')[0];
-      const dayOfWeek = currentDate.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const schedule = schedules[dateKey] || [];
+      useEffect(() => { storage.set('schedules', schedules); }, [schedules]);
+      useEffect(() => { storage.set('blocks', blocks); }, [blocks]);
+      useEffect(() => { storage.set('weekContexts', weekContexts); }, [weekContexts]);
+      useEffect(() => { storage.set('goals', goals); }, [goals]);
+      useEffect(() => { storage.set('brainDump', brainDump); }, [brainDump]);
+      useEffect(() => { storage.set('triggers', checkedTriggers); }, [checkedTriggers]);
+      useEffect(() => { storage.set('weekFocus', weekFocus); }, [weekFocus]);
+      useEffect(() => { storage.set('metrics', metrics); }, [metrics]);
+      useEffect(() => { storage.set('todayScenario', todayScenario); }, [todayScenario]);
 
-      // Auto-save schedules
-      useEffect(() => {
-        storage.set('schedules', schedules);
-      }, [schedules]);
+      const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(weekStart);
+        d.setDate(weekStart.getDate() + i);
+        return d;
+      }), [weekStart]);
 
-      // Tomorrow
-      const tomorrowDate = new Date(currentDate);
-      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-      const tomorrowKey = tomorrowDate.toISOString().split('T')[0];
-      const tomorrowSchedule = schedules[tomorrowKey] || [];
+      const todayKey = formatDate(new Date());
+      const todayDayOfWeek = new Date().getDay();
+      const todayContext = weekContexts[todayDayOfWeek];
+      const isWeekend = todayDayOfWeek === 0 || todayDayOfWeek === 6;
 
-      // NIGHT limit
-      const nightLimit = useMemo(() => {
-        const tomorrowFirstTask = tomorrowSchedule
-          .filter(b => !b.auto)
-          .sort((a, b) => a.startHour - b.startHour)[0];
-        
-        if (!tomorrowFirstTask) {
-          return { maxHour: 28, message: 'Завтра пусто → до 04:00', firstTask: null };
+      // Определение сценария из расписания
+      const detectScenarioFromSchedule = useCallback((schedule) => {
+        if (!schedule || schedule.length === 0) return null;
+        const opBlock = schedule.find(b => b.blockId && b.blockId.startsWith('OP'));
+        if (!opBlock) return isWeekend ? 'w' : null;
+        const opStart = opBlock.startHour;
+        if (opStart <= 9.5) return '1';
+        if (opStart <= 11.5) return '2';
+        if (opStart <= 15) return '3';
+        return '4';
+      }, [isWeekend]);
+
+      // Текущий активный сценарий (гибридно)
+      const activeScenario = useMemo(() => {
+        // Если сценарий уже выбран на сегодня — используем его
+        if (todayScenario.date === todayKey && todayScenario.scenario) {
+          return todayScenario.scenario;
         }
-        
-        const taskStart = tomorrowFirstTask.startHour;
-        const sleepNeeded = 8;
-        const sleepStart = taskStart - sleepNeeded;
-        const maxNightEnd = sleepStart;
-        const maxHour = maxNightEnd < 5 ? maxNightEnd + 24 : maxNightEnd;
-        const maxF = maxNightEnd < 0 
-          ? `${String(Math.floor(maxNightEnd + 24)).padStart(2, '0')}:00`
-          : `${String(Math.floor(maxNightEnd)).padStart(2, '0')}:00`;
-        
-        const taskName = blocks[tomorrowFirstTask.blockId]?.name || 'задача';
-        return { maxHour, message: `${taskName} ${taskStart}:00 → до ${maxF}`, firstTask: tomorrowFirstTask };
-      }, [tomorrowSchedule, blocks]);
+        // Иначе пытаемся определить из расписания
+        const todaySchedule = schedules[todayKey];
+        const detected = detectScenarioFromSchedule(todaySchedule);
+        return detected;
+      }, [todayKey, todayScenario, schedules, detectScenarioFromSchedule]);
 
-      // Sport info
-      const sportInfo = useMemo(() => {
-        if (isWeekend) return { available: true, text: 'Выходной 🎉' };
-        const op = schedule.find(b => b.blockId.startsWith('OP'));
-        if (!op) return { available: true, text: 'Вход до 17:00' };
-        const opStart = op.startHour;
-        const opEnd = opStart + op.duration / 60;
-        const windows = [];
-        if (opStart > 7.5) windows.push(`7:30-${Math.floor(opStart)}:00`);
-        if (opEnd < 17) windows.push(`${Math.ceil(opEnd)}:00-17:00`);
-        if (windows.length === 0) return { available: false, text: 'Нет окна' };
-        return { available: true, text: windows.join(' / ') };
-      }, [schedule, isWeekend]);
+      // Установить сценарий на сегодня
+      const setScenarioForToday = useCallback((scenario) => {
+        setTodayScenario({ date: todayKey, scenario });
+      }, [todayKey]);
 
-      // Available calls for today
-      const availableCalls = useMemo(() => {
-        return Object.values(blocks).filter(b => b.category === 'CALL' && b.days?.includes(dayOfWeek));
-      }, [dayOfWeek, blocks]);
+      // Определить текущий активный блок из расписания на сегодня
+      const getCurrentActiveBlock = useCallback(() => {
+        const todaySchedule = schedules[todayKey] || [];
+        const now = new Date();
+        const currentHour = now.getHours() + now.getMinutes() / 60;
 
-      // Blocks by category (for basket)
-      const blocksByCategory = useMemo(() => {
-        const result = {};
-        Object.values(blocks).forEach(b => {
-          if (b.category === 'CALL' || b.category === 'BUFFER') return;
-          if (!result[b.category]) result[b.category] = [];
-          result[b.category].push(b);
-        });
-        return result;
-      }, [blocks]);
+        // Ищем блок, в который попадает текущее время
+        for (const item of todaySchedule) {
+          const endHour = item.startHour + item.duration / 60;
+          // Для ночных часов (24+) нормализуем
+          const normalizedStart = item.startHour >= 24 ? item.startHour - 24 : item.startHour;
+          const normalizedEnd = endHour >= 24 ? endHour - 24 : endHour;
 
-      // Auto-fill when OP placed
+          if (item.startHour < 24 && currentHour >= item.startHour && currentHour < endHour) {
+            return item;
+          }
+          // Ночные блоки
+          if (item.startHour >= 24 && currentHour >= normalizedStart && currentHour < normalizedEnd) {
+            return item;
+          }
+        }
+        return null;
+      }, [schedules, todayKey]);
+
+      // Получить контекст из расписания (какой проект сейчас активен)
+      const getContextFromSchedule = useMemo(() => {
+        const todaySchedule = schedules[todayKey] || [];
+
+        // Находим все рабочие блоки (Полечат, Лаб, Сомалаб)
+        const workBlocks = todaySchedule.filter(b =>
+          b.blockId === 'POLECHAT' || b.blockId === 'LAB' || b.blockId === 'SOMALAB'
+        );
+
+        if (workBlocks.length === 0) return null;
+
+        // Если есть рабочий блок — возвращаем его проект
+        const blockToProject = {
+          'POLECHAT': 'POLECHAT',
+          'LAB': 'LAB',
+          'SOMALAB': 'SOMALAB'
+        };
+
+        // Возвращаем первый рабочий блок (или можно определить по времени)
+        return blockToProject[workBlocks[0].blockId];
+      }, [schedules, todayKey]);
+
+      const hasCollision = useCallback((schedule, newStart, newDuration, excludeIds = []) => {
+        const newEnd = newStart + newDuration / 60;
+        return schedule.some(b => !excludeIds.includes(b.id) && newStart < b.startHour + b.duration / 60 && newEnd > b.startHour);
+      }, []);
+
       const generateAutoBlocks = useCallback((opStart, opDuration) => {
         const opEnd = opStart + opDuration / 60;
         const result = [];
         const ts = Date.now();
-        
-        // Buffer before OP
-        const bufferBefore = roundToHalfHour(opStart - 0.5);
-        if (bufferBefore >= 7) {
-          result.push({ id: `BUFFER_BEFORE-${ts}`, blockId: 'BUFFER', startHour: bufferBefore, duration: 30, auto: true, label: 'до ОП' });
-        }
-        
-        // Buffer after OP
-        const bufferAfter = roundToHalfHour(opEnd);
-        result.push({ id: `BUFFER_AFTER-${ts}`, blockId: 'BUFFER', startHour: bufferAfter, duration: 30, auto: true, label: 'после ОП' });
-        
-        // Family after buffer
-        const famStart = roundToHalfHour(bufferAfter + 0.5);
-        result.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 120, auto: true });
-        
-        // Maya walk if 14-17 free
-        if (!(opStart < 17 && opEnd > 14)) {
-          result.push({ id: `MAYA_WALK-${ts}`, blockId: 'MAYA_WALK', startHour: 15, duration: 90, auto: true });
-        }
-        
+        const roadStart = roundToHalfHour(opStart - 0.5);
+        if (roadStart >= 7) result.push({ id: `ROAD-${ts}`, blockId: 'ROAD', startHour: roadStart, duration: 25, auto: true });
+        result.push({ id: `BUFFER-${ts}`, blockId: 'BUFFER', startHour: roundToHalfHour(opEnd), duration: 30, auto: true });
+        const famStart = roundToHalfHour(opEnd + 0.5);
+        if (famStart < 22) result.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 50, auto: true });
         return result;
       }, []);
 
-      const updateSchedule = useCallback((newSchedule) => {
-        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
-      }, [dateKey]);
-
-      const hasCollision = useCallback((newStart, newDuration, excludeIds = []) => {
-        const newEnd = newStart + newDuration / 60;
-        return schedule.some(b => {
-          if (excludeIds.includes(b.id)) return false;
-          const end = b.startHour + b.duration / 60;
-          return newStart < end && newEnd > b.startHour;
-        });
-      }, [schedule]);
-
-      const recalculateAutoBlocks = useCallback((currentSchedule, opBlock) => {
-        const withoutAuto = currentSchedule.filter(b => !b.auto);
-        const newAutoBlocks = generateAutoBlocks(opBlock.startHour, opBlock.duration);
-        return [...withoutAuto, ...newAutoBlocks];
+      const recalculateAutoBlocks = useCallback((schedule, opBlock) => {
+        const nonAuto = schedule.filter(b => !b.auto);
+        return [...nonAuto, ...generateAutoBlocks(opBlock.startHour, opBlock.duration)];
       }, [generateAutoBlocks]);
 
-      const selectBlock = useCallback((blockId) => {
-        setDraggedBlockId(null);
-        setSelectedBlock(selectedBlock === blockId ? null : blockId);
-      }, [selectedBlock]);
+      // Apply scenario with OP count and context
+      const applyScenario = useCallback((dateKey, scenarioKey, opCount, contextKey) => {
+        const scenario = SCENARIOS[scenarioKey];
+        const context = CONTEXTS[contextKey];
+        const schedule = [];
+        const ts = Date.now();
 
-      const placeBlock = useCallback((hour) => {
+        const opBlockId = opCount === 1 ? 'OP_1' : opCount === 2 ? 'OP_2' : 'OP_3';
+        const opDuration = blocks[opBlockId].duration;
+
+        if (scenario.isWeekend) {
+          schedule.push({ id: `SLEEP-${ts}`, blockId: 'SLEEP', startHour: 24, duration: 480 });
+          schedule.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: 12, duration: 120 });
+          schedule.push({ id: `WALK-${ts}`, blockId: 'WALK', startHour: 14, duration: 90 });
+          schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT_SPA', startHour: 16, duration: 150 });
+          schedule.push({ id: `HYPER-${ts}`, blockId: 'HYPER', startHour: 20, duration: 180 });
+        } else {
+          const sleepStart = scenario.wakeUp - 8 + 24;
+          schedule.push({ id: `SLEEP-${ts}`, blockId: 'SLEEP', startHour: sleepStart, duration: 480 });
+          
+          if (scenario.homeWindow) {
+            schedule.push({ id: `HOME-${ts}`, blockId: context.blockId, startHour: scenario.homeWindow.start, duration: scenario.homeWindow.dur });
+          }
+          
+          schedule.push({ id: `ROAD-${ts}`, blockId: 'ROAD', startHour: scenario.opStart - 0.5, duration: 25, auto: true });
+          schedule.push({ id: `OP-${ts}`, blockId: opBlockId, startHour: scenario.opStart, duration: opDuration });
+          
+          const opEnd = scenario.opStart + opDuration / 60;
+          schedule.push({ id: `BUFFER-${ts}`, blockId: 'BUFFER', startHour: roundToHalfHour(opEnd), duration: 30, auto: true });
+          schedule.push({ id: `ROAD2-${ts}`, blockId: 'ROAD', startHour: roundToHalfHour(opEnd + 0.5), duration: 25, auto: true });
+          
+          const famStart = roundToHalfHour(opEnd + 1);
+          schedule.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 50, auto: true });
+          
+          schedule.push({ id: `EVE-${ts}`, blockId: context.blockId, startHour: roundToHalfHour(famStart + 1), duration: 180 });
+          
+          if (scenario.canGym) schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT', startHour: 15, duration: 90 });
+        }
+        
+        setSchedules(prev => ({ ...prev, [dateKey]: schedule }));
+        setShowScenarioModal(null);
+      }, [blocks]);
+
+      const placeBlock = useCallback((dateKey, hour) => {
         if (!selectedBlock) return;
         const blockDef = blocks[selectedBlock];
-        if (!blockDef) return;
-        if (selectedBlock.startsWith('OP') && hour >= 21) return;
-        if (hasCollision(hour, blockDef.duration)) return;
-        
-        const newBlock = { id: `${selectedBlock}-${Date.now()}`, blockId: selectedBlock, startHour: hour, duration: blockDef.duration };
-        let newSchedule = [...schedule, newBlock];
-        
-        if (selectedBlock.startsWith('OP')) {
-          newSchedule = [...newSchedule, ...generateAutoBlocks(hour, blockDef.duration)];
-        }
-        
-        updateSchedule(newSchedule);
+        if (!blockDef || (selectedBlock.startsWith('OP') && hour >= 21)) return;
+        const schedule = schedules[dateKey] || [];
+        if (hasCollision(schedule, hour, blockDef.duration)) return;
+        let newSchedule = [...schedule, { id: `${selectedBlock}-${Date.now()}`, blockId: selectedBlock, startHour: hour, duration: blockDef.duration }];
+        if (selectedBlock.startsWith('OP')) newSchedule = [...newSchedule, ...generateAutoBlocks(hour, blockDef.duration)];
+        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
         setSelectedBlock(null);
-      }, [selectedBlock, schedule, blocks, hasCollision, generateAutoBlocks, updateSchedule]);
+      }, [selectedBlock, schedules, blocks, hasCollision, generateAutoBlocks]);
 
-      const moveBlock = useCallback((blockInstanceId, newHour) => {
-        const block = schedule.find(b => b.id === blockInstanceId);
-        if (!block) return;
-        if (block.blockId.startsWith('OP') && newHour >= 21) return;
-        
-        const excludeIds = block.blockId.startsWith('OP') 
-          ? [blockInstanceId, ...schedule.filter(b => b.auto).map(b => b.id)]
-          : [blockInstanceId];
-        
-        if (hasCollision(newHour, block.duration, excludeIds)) return;
-        
-        let newSchedule = schedule.map(b => b.id === blockInstanceId ? { ...b, startHour: newHour } : b);
-        
-        if (block.blockId.startsWith('OP')) {
-          const movedOp = { ...block, startHour: newHour };
-          newSchedule = recalculateAutoBlocks(newSchedule, movedOp);
-        }
-        
-        updateSchedule(newSchedule);
-        setDraggedBlockId(null);
-      }, [schedule, hasCollision, recalculateAutoBlocks, updateSchedule]);
+      const moveBlock = useCallback((toDateKey, newHour) => {
+        if (!movingBlock) return;
+        const { id, dateKey: fromDateKey } = movingBlock;
+        const fromSchedule = schedules[fromDateKey] || [];
+        const block = fromSchedule.find(b => b.id === id);
+        if (!block || (block.blockId.startsWith('OP') && newHour >= 21)) return;
+        const toSchedule = fromDateKey === toDateKey ? fromSchedule : (schedules[toDateKey] || []);
+        const excludeIds = block.blockId.startsWith('OP') ? [id, ...fromSchedule.filter(b => b.auto).map(b => b.id)] : [id];
+        if (hasCollision(toSchedule.filter(b => fromDateKey !== toDateKey || !excludeIds.includes(b.id)), newHour, block.duration)) return;
+        let newFromSchedule = fromSchedule.filter(b => b.id !== id);
+        if (block.blockId.startsWith('OP')) newFromSchedule = newFromSchedule.filter(b => !b.auto);
+        let newToSchedule = fromDateKey === toDateKey ? newFromSchedule : [...toSchedule];
+        newToSchedule = [...newToSchedule, { ...block, startHour: newHour }];
+        if (block.blockId.startsWith('OP')) newToSchedule = [...newToSchedule, ...generateAutoBlocks(newHour, block.duration)];
+        setSchedules(prev => ({ ...prev, [fromDateKey]: newFromSchedule, [toDateKey]: newToSchedule }));
+        setMovingBlock(null);
+      }, [movingBlock, schedules, hasCollision, generateAutoBlocks]);
 
-      const resizeBlock = useCallback((blockInstanceId, delta) => {
-        const block = schedule.find(b => b.id === blockInstanceId);
+      const resizeBlock = useCallback((dateKey, blockId, delta) => {
+        const schedule = schedules[dateKey] || [];
+        const block = schedule.find(b => b.id === blockId);
         if (!block) return;
-        
         const def = blocks[block.blockId];
         if (!def) return;
         const newDuration = block.duration + delta;
-        
-        if (newDuration < (def.minDur || 30) || newDuration > (def.maxDur || 480)) return;
-        
-        const excludeIds = block.blockId.startsWith('OP') 
-          ? [blockInstanceId, ...schedule.filter(b => b.auto).map(b => b.id)]
-          : [blockInstanceId];
-        
-        if (delta > 0 && hasCollision(block.startHour, newDuration, excludeIds)) return;
-        
-        let newSchedule = schedule.map(b => b.id === blockInstanceId ? { ...b, duration: newDuration } : b);
-        
-        if (block.blockId.startsWith('OP')) {
-          const resizedOp = { ...block, duration: newDuration };
-          newSchedule = recalculateAutoBlocks(newSchedule, resizedOp);
-        }
-        
-        updateSchedule(newSchedule);
-      }, [schedule, blocks, hasCollision, recalculateAutoBlocks, updateSchedule]);
+        if (newDuration < def.minDur || newDuration > def.maxDur) return;
+        const excludeIds = block.blockId.startsWith('OP') ? [blockId, ...schedule.filter(b => b.auto).map(b => b.id)] : [blockId];
+        if (delta > 0 && hasCollision(schedule, block.startHour, newDuration, excludeIds)) return;
+        let newSchedule = schedule.map(b => b.id === blockId ? { ...b, duration: newDuration } : b);
+        if (block.blockId.startsWith('OP')) newSchedule = recalculateAutoBlocks(newSchedule, { ...block, duration: newDuration });
+        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
+      }, [schedules, blocks, hasCollision, recalculateAutoBlocks]);
 
-      const removeBlock = useCallback((blockInstanceId) => {
-        const block = schedule.find(b => b.id === blockInstanceId);
-        let newSchedule = schedule.filter(b => b.id !== blockInstanceId);
-        if (block?.blockId.startsWith('OP')) {
-          newSchedule = newSchedule.filter(b => !b.auto);
-        }
-        updateSchedule(newSchedule);
-      }, [schedule, updateSchedule]);
+      const removeBlock = useCallback((dateKey, blockId) => {
+        const schedule = schedules[dateKey] || [];
+        const block = schedule.find(b => b.id === blockId);
+        let newSchedule = schedule.filter(b => b.id !== blockId);
+        if (block?.blockId.startsWith('OP')) newSchedule = newSchedule.filter(b => !b.auto);
+        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
+      }, [schedules]);
 
-      const changeDay = (delta) => {
-        const d = new Date(currentDate);
-        d.setDate(d.getDate() + delta);
-        setCurrentDate(d);
-        setSelectedBlock(null);
-        setDraggedBlockId(null);
-      };
+      const changeWeek = (delta) => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + delta * 7); return d; });
+      const goToToday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); setWeekStart(d); };
 
-      const goToToday = () => {
-        setCurrentDate(new Date());
-        setSelectedBlock(null);
-        setDraggedBlockId(null);
-      };
-
-      const getBlockAtSlot = (hour) => {
-        return schedule.find(b => {
-          const end = b.startHour + b.duration / 60;
-          return hour >= b.startHour && hour < end;
+      const blocksByCategory = useMemo(() => {
+        const result = {};
+        Object.values(blocks).forEach(b => {
+          if (b.category !== 'BUFFER') {
+            if (!result[b.category]) result[b.category] = [];
+            result[b.category].push(b);
+          }
         });
+        return result;
+      }, [blocks]);
+
+      const addGoal = () => {
+        if (!newGoalText.trim()) return;
+        setGoals(prev => [...prev, { id: genId(), text: newGoalText, project: newGoalProject, period: newGoalPeriod, done: false }]);
+        setNewGoalText('');
+      };
+      const toggleGoal = (id) => setGoals(prev => prev.map(g => g.id === id ? { ...g, done: !g.done } : g));
+      const deleteGoal = (id) => setGoals(prev => prev.filter(g => g.id !== id));
+
+      const addDump = () => {
+        if (!newDumpText.trim()) return;
+        setBrainDump(prev => [{ id: genId(), text: newDumpText, project: newDumpProject, createdAt: new Date().toISOString() }, ...prev]);
+        setNewDumpText('');
+        setNewDumpProject('');
+      };
+      const deleteDump = (id) => setBrainDump(prev => prev.filter(d => d.id !== id));
+      const convertToGoal = (item) => {
+        setGoals(prev => [...prev, { id: genId(), text: item.text, project: item.project || '', period: 'D', done: false }]);
+        deleteDump(item.id);
       };
 
-      // Stats
-      const stats = useMemo(() => {
-        const calc = (cat) => schedule.filter(b => blocks[b.blockId]?.category === cat).reduce((s, b) => s + b.duration, 0);
-        return {
-          op: Math.round(calc('OP') / 60 * 10) / 10,
-          polechat: Math.round(calc('POLECHAT') / 60 * 10) / 10,
-          somalab: Math.round(calc('SOMALAB') / 60 * 10) / 10,
-          lab: Math.round(calc('LAB') / 60 * 10) / 10,
-          science: Math.round(calc('SCIENCE') / 60 * 10) / 10,
-        };
-      }, [schedule, blocks]);
+      const goalsByPeriod = useMemo(() => {
+        const p = { D: [], W: [], M: [], Q: [], other: [] };
+        goals.forEach(g => { if (p[g.period]) p[g.period].push(g); else p.other.push(g); });
+        return p;
+      }, [goals]);
 
-      // Render blocks on timeline
-      const renderBlocks = () => {
-        return schedule.map(block => {
-          const def = blocks[block.blockId];
-          if (!def) return null;
-          
-          const startSlotIndex = TIME_SLOTS.findIndex(s => s.hour === block.startHour);
-          if (startSlotIndex === -1) return null;
-          
-          const slotsSpanned = block.duration / 30;
-          const top = startSlotIndex * SLOT_HEIGHT;
-          const height = slotsSpanned * SLOT_HEIGHT - 2;
-          const isDragging = draggedBlockId === block.id;
-          
-          let displayName = def.name;
-          if (block.blockId === 'BUFFER' && block.label) displayName = `Буфер ${block.label}`;
-          
-          return (
-            <div
-              key={block.id}
-              className={`absolute left-12 right-2 rounded-lg flex flex-col justify-between p-1.5 cursor-pointer ${
-                isDragging ? 'ring-2 ring-blue-400 opacity-70 z-10' : ''
-              } ${def.category === 'CALL' ? 'border-2 border-dashed border-white/40' : ''}`}
-              style={{ top: `${top}px`, height: `${height}px`, backgroundColor: def.color, opacity: block.auto ? 0.8 : 1 }}
-              onClick={() => { setSelectedBlock(null); setDraggedBlockId(isDragging ? null : block.id); }}
-            >
-              <div className="flex items-center gap-1 overflow-hidden">
-                <span className="text-white/50">⋮⋮</span>
-                <span>{def.emoji}</span>
-                <span className="text-white text-xs font-medium truncate">{displayName}</span>
-                {block.auto && <span className="text-white/50 text-xs">(авто)</span>}
-              </div>
-              
-              {height >= 50 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70 text-xs">{block.duration} мин</span>
-                  <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => resizeBlock(block.id, -30)} disabled={block.duration <= (def.minDur || 30)}
-                      className="w-7 h-7 flex items-center justify-center bg-white/20 rounded text-lg disabled:opacity-30">−</button>
-                    <button onClick={() => resizeBlock(block.id, 30)} disabled={block.duration >= (def.maxDur || 480)}
-                      className="w-7 h-7 flex items-center justify-center bg-white/20 rounded text-lg disabled:opacity-30">+</button>
-                    <button onClick={() => removeBlock(block.id)}
-                      className="w-7 h-7 flex items-center justify-center bg-red-500/40 rounded">×</button>
-                  </div>
-                </div>
-              )}
-              
-              {height < 50 && (
-                <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                  <span className="text-white/70 text-xs mr-auto">{block.duration}м</span>
-                  <button onClick={() => resizeBlock(block.id, -30)} disabled={block.duration <= (def.minDur || 30)}
-                    className="w-6 h-6 flex items-center justify-center bg-white/20 rounded text-sm disabled:opacity-30">−</button>
-                  <button onClick={() => resizeBlock(block.id, 30)} disabled={block.duration >= (def.maxDur || 480)}
-                    className="w-6 h-6 flex items-center justify-center bg-white/20 rounded text-sm disabled:opacity-30">+</button>
-                  <button onClick={() => removeBlock(block.id)}
-                    className="w-6 h-6 flex items-center justify-center bg-red-500/40 rounded text-sm">×</button>
-                </div>
-              )}
-            </div>
-          );
-        });
+      const updateMetric = (project, field, value) => {
+        setMetrics(prev => ({
+          ...prev,
+          [project]: { ...prev[project], [field]: value }
+        }));
       };
 
-      // Block button in basket
-      const BlockBtn = ({ blockId }) => {
-        const b = blocks[blockId];
-        if (!b) return null;
-        const sel = selectedBlock === blockId;
+      const METRICS_CONFIG = {
+        POLECHAT: [
+          { key: 'contacts', label: 'Контактов с врачами', type: 'number', target: 5 },
+          { key: 'pilots', label: 'Пилотов/платящих', type: 'number' },
+          { key: 'legal', label: 'Юр. вопросов закрыто', type: 'number' },
+        ],
+        LAB: [
+          { key: 'grants', label: 'Заявок на гранты', type: 'number' },
+          { key: 'publications', label: 'Публикаций в работе', type: 'number' },
+          { key: 'talks', label: 'Выступлений', type: 'number' },
+        ],
+        SOMALAB: [
+          { key: 'revenue', label: 'Выручка', type: 'text' },
+          { key: 'b2cProgress', label: 'Прогресс B2C', type: 'text' },
+        ],
+        PERSONAL: [
+          { key: 'workouts', label: 'Тренировок', type: 'number', target: 2 },
+          { key: 'maiTime', label: '50 мин с Май сегодня', type: 'checkbox' },
+        ],
+      };
+
+      // Day Column
+      const DayColumn = ({ date, schedule, dateKey, prevSchedule }) => {
+        const dayOfWeek = date.getDay();
+        const isToday = dateKey === todayKey;
+        const contextKey = weekContexts[dayOfWeek];
+        const context = CONTEXTS[contextKey];
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+        // Находим сон из предыдущего дня, который переливается в текущий
+        const overflowSleep = useMemo(() => {
+          if (!prevSchedule) return null;
+          const sleepBlock = prevSchedule.find(b => b.blockId === 'SLEEP');
+          if (!sleepBlock) return null;
+          // startHour >= 24 означает что это ночные часы (00:00+)
+          // Если сон начинается после полуночи и заканчивается после 4 утра (когда шкала заканчивается в prev day)
+          const endHour = sleepBlock.startHour + sleepBlock.duration / 60;
+          // Шкала заканчивается на 27.5 (03:30). Если сон заканчивается после этого — часть переливается
+          if (sleepBlock.startHour >= 24 && endHour > 28) {
+            const overflowStart = 7; // начало шкалы текущего дня
+            const overflowEnd = Math.min(endHour - 24, 12); // конец overflow (нормализуем к 7-12)
+            const overflowDuration = (overflowEnd - overflowStart) * 60;
+            if (overflowDuration > 0) {
+              return {
+                ...sleepBlock,
+                startHour: overflowStart,
+                duration: overflowDuration,
+                isOverflow: true,
+                totalDuration: sleepBlock.duration // полная длительность для отображения
+              };
+            }
+          }
+          return null;
+        }, [prevSchedule]);
+
         return (
-          <button
-            onClick={() => selectBlock(blockId)}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-all active:scale-95 ${sel ? 'ring-2 ring-white' : ''}`}
-            style={{ background: sel ? b.color : `${b.color}44`, borderLeft: `3px solid ${b.color}` }}
-          >
-            <span>{b.emoji}</span>
-            <span className="text-white truncate">{b.name}</span>
-          </button>
-        );
-      };
-
-      // Show settings
-      if (showSettings) {
-        return <SettingsScreen blocks={blocks} setBlocks={setBlocks} onClose={() => setShowSettings(false)} />;
-      }
-
-      return (
-        <div className="min-h-screen bg-gray-900 text-white pb-16">
-          {/* Header */}
-          <header className="bg-gray-800 px-3 py-2 sticky top-0 z-30">
-            <div className="flex items-center justify-between">
-              <button onClick={() => setShowSettings(true)} className="text-xl w-10 h-10 flex items-center justify-center">⚙️</button>
-              <div className="flex items-center">
-                <button onClick={() => changeDay(-1)} className="p-2 text-2xl">‹</button>
-                <button onClick={goToToday} className="text-center w-28">
-                  <div className="text-sm font-medium">{DAYS_FULL[dayOfWeek]}</div>
-                  <div className="text-xs text-gray-400">
-                    {currentDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                  </div>
-                </button>
-                <button onClick={() => changeDay(1)} className="p-2 text-2xl">›</button>
+          <div className="flex-1 min-w-0 border-r border-gray-800 last:border-r-0 flex flex-col">
+            {/* Header */}
+            <div 
+              className={`sticky top-0 z-10 p-0.5 text-center border-b border-gray-700 cursor-pointer ${isToday ? 'bg-orange-900/50' : 'bg-gray-800'}`}
+              onClick={() => setShowScenarioModal({ dateKey, dayOfWeek })}
+            >
+              <div className="flex items-center justify-center gap-1">
+                <span className={`font-bold ${isWeekend ? 'text-orange-300' : ''}`} style={{ fontSize: '11px' }}>{dayNames[dayOfWeek]}</span>
+                <span className={`${isToday ? 'text-orange-300' : 'text-gray-400'}`} style={{ fontSize: '11px' }}>{date.getDate()}</span>
               </div>
-              <span className="text-xl w-10 h-10 flex items-center justify-center">🦁</span>
+              <div 
+                className="px-1 py-0.5 rounded mx-0.5" 
+                style={{ backgroundColor: context.color + '33', color: context.color, fontSize: '9px' }}
+              >
+                {context.emoji} {context.name}
+              </div>
+              <div className="text-gray-500 mt-0.5" style={{ fontSize: '8px' }}>тап = план</div>
             </div>
-            
-            <div className="mt-2 flex gap-2 text-xs">
-              <div className="flex-1 px-2 py-1.5 rounded bg-purple-900/50 flex items-center gap-1">
-                <span>🌙</span><span className="truncate">{nightLimit.message}</span>
-              </div>
-              <div className={`px-2 py-1.5 rounded whitespace-nowrap ${sportInfo.available ? 'bg-green-900/50' : 'bg-red-900/50'}`}>
-                🏋️ {sportInfo.text}
-              </div>
-            </div>
-          </header>
 
-          {/* Selection indicator */}
-          {(selectedBlock || draggedBlockId) && (
-            <div className={`px-4 py-2 text-center text-sm sticky top-24 z-20 ${draggedBlockId ? 'bg-blue-800' : 'bg-green-800'}`}>
-              {draggedBlockId 
-                ? `Перемещение: ${blocks[schedule.find(b=>b.id===draggedBlockId)?.blockId]?.emoji} — тапни куда`
-                : `${blocks[selectedBlock]?.emoji} ${blocks[selectedBlock]?.name} — тапни на время`}
-            </div>
-          )}
-
-          {/* Basket */}
-          <div className="bg-gray-800/80 border-b border-gray-700">
-            <button onClick={() => setBasketOpen(!basketOpen)} className="w-full px-3 py-2 flex justify-between text-sm">
-              <span className="text-gray-400 font-semibold">БЛОКИ</span>
-              <span className="text-gray-500">{basketOpen ? '▲' : '▼'}</span>
-            </button>
-            
-            {basketOpen && (
-              <div className="px-3 pb-3 space-y-2 text-xs no-scrollbar" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
-                {availableCalls.length > 0 && (
-                  <div>
-                    <span className="text-red-400">📞 Звонки сегодня</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1">{availableCalls.map(c => <BlockBtn key={c.id} blockId={c.id} />)}</div>
-                  </div>
-                )}
-                {Object.entries(blocksByCategory).map(([cat, catBlocks]) => (
-                  <div key={cat}>
-                    <span className="text-gray-500">{CATEGORIES[cat]}</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {catBlocks.map(b => <BlockBtn key={b.id} blockId={b.id} />)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Timeline */}
-          <div className="relative" style={{ height: `${TIME_SLOTS.length * SLOT_HEIGHT}px` }}>
-            {TIME_SLOTS.map((slot, idx) => {
-              const isNight = slot.hour >= 24 || slot.hour < 5;
-              const isPastLimit = nightLimit.firstTask && slot.hour > nightLimit.maxHour;
-              const block = getBlockAtSlot(slot.hour);
-              const canPlace = (selectedBlock || draggedBlockId) && !block;
-              
-              return (
+            {/* Slots */}
+            <div className="relative flex-1" style={{ minHeight: TIME_SLOTS.length * SLOT_HEIGHT }}>
+              {TIME_SLOTS.map((slot, idx) => (
                 <div
                   key={slot.hour}
                   onClick={() => {
-                    if (draggedBlockId && !block) moveBlock(draggedBlockId, slot.hour);
-                    else if (selectedBlock && !block) placeBlock(slot.hour);
+                    if (movingBlock) moveBlock(dateKey, slot.hour);
+                    else if (selectedBlock) placeBlock(dateKey, slot.hour);
                   }}
-                  className={`absolute left-0 right-0 flex items-center px-2 border-b border-gray-800/50 ${
-                    canPlace ? 'active:bg-green-900/30' : ''
-                  } ${isPastLimit && isNight ? 'bg-red-900/10' : ''}`}
-                  style={{ top: `${idx * SLOT_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}
-                >
-                  <div className={`w-10 text-xs ${
-                    isNight ? (isPastLimit ? 'text-red-400' : 'text-purple-400') : 
-                    slot.isHalf ? 'text-gray-600' : 'text-gray-500'
-                  }`}>
-                    {isNight && !slot.isHalf && '🌙'}
-                    {slot.label}
-                  </div>
-                </div>
-              );
-            })}
-            {renderBlocks()}
-          </div>
+                  className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.hour >= 24 ? 'bg-purple-900/10' : ''}`}
+                  style={{ top: idx * SLOT_HEIGHT, height: SLOT_HEIGHT }}
+                />
+              ))}
 
-          {/* Stats */}
-          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 px-2 py-2 z-20">
-            <div className="flex justify-around text-center text-xs">
-              <div><div className="text-base font-bold text-red-400">{stats.op || '—'}</div><div className="text-gray-500">🏥</div></div>
-              <div><div className="text-base font-bold text-blue-400">{stats.polechat || '—'}</div><div className="text-gray-500">💼</div></div>
-              <div><div className="text-base font-bold text-orange-400">{stats.somalab || '—'}</div><div className="text-gray-500">⚡</div></div>
-              <div><div className="text-base font-bold text-purple-400">{stats.lab || '—'}</div><div className="text-gray-500">🔬</div></div>
-              <div><div className="text-base font-bold text-teal-400">{stats.science || '—'}</div><div className="text-gray-500">📝</div></div>
+              {/* Overflow сон из предыдущего дня */}
+              {overflowSleep && (() => {
+                const def = blocks[overflowSleep.blockId];
+                if (!def) return null;
+                const startIdx = TIME_SLOTS.findIndex(s => s.hour === overflowSleep.startHour);
+                if (startIdx === -1) return null;
+                const top = startIdx * SLOT_HEIGHT;
+                const height = (overflowSleep.duration / 30) * SLOT_HEIGHT - 1;
+                const totalHours = Math.round(overflowSleep.totalDuration / 60 * 10) / 10;
+
+                return (
+                  <div
+                    key="overflow-sleep"
+                    className="absolute left-0.5 right-0.5 rounded overflow-hidden opacity-70"
+                    style={{ top, height, backgroundColor: def.color, borderTop: '2px dashed rgba(255,255,255,0.5)' }}
+                  >
+                    <div className="p-0.5 text-white h-full flex flex-col" style={{ fontSize: '8px' }}>
+                      <div className="flex items-center gap-0.5 truncate">
+                        <span>{def.emoji}</span>
+                        {height > 16 && <span className="truncate">Сон ({totalHours}ч)</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {schedule.map(item => {
+                const def = blocks[item.blockId];
+                if (!def) return null;
+                const startIdx = TIME_SLOTS.findIndex(s => s.hour === item.startHour);
+                if (startIdx === -1) return null;
+                const top = startIdx * SLOT_HEIGHT;
+                const height = (item.duration / 30) * SLOT_HEIGHT - 1;
+                const isMoving = movingBlock?.id === item.id;
+                const isSleep = item.blockId === 'SLEEP';
+                const sleepHours = isSleep ? Math.round(item.duration / 60 * 10) / 10 : 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setMovingBlock(isMoving ? null : { id: item.id, dateKey })}
+                    className={`absolute left-0.5 right-0.5 rounded overflow-hidden cursor-pointer ${isMoving ? 'ring-2 ring-white z-10' : ''}`}
+                    style={{ top, height, backgroundColor: def.color, opacity: item.auto ? 0.6 : 1 }}
+                  >
+                    <div className="p-0.5 text-white h-full flex flex-col" style={{ fontSize: '8px' }}>
+                      <div className="flex items-center gap-0.5 truncate">
+                        <span>{def.emoji}</span>
+                        {height > 16 && <span className="truncate">{def.name}{isSleep ? ` (${sleepHours}ч)` : ''}</span>}
+                      </div>
+                      {height >= 32 && (
+                        <div className="flex items-center justify-between mt-auto">
+                          <span className="opacity-70">{item.duration}м</span>
+                          <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => resizeBlock(dateKey, item.id, -30)} disabled={item.duration <= def.minDur} className="w-3.5 h-3.5 bg-white/20 rounded disabled:opacity-30">−</button>
+                            <button onClick={() => resizeBlock(dateKey, item.id, 30)} disabled={item.duration >= def.maxDur} className="w-3.5 h-3.5 bg-white/20 rounded disabled:opacity-30">+</button>
+                            <button onClick={() => removeBlock(dateKey, item.id)} className="w-3.5 h-3.5 bg-red-500/40 rounded">×</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        );
+      };
+
+      // Scenario Modal
+      const ScenarioModal = ({ dateKey, dayOfWeek, onClose }) => {
+        const [scenario, setScenario] = useState('3');
+        const [opCount, setOpCount] = useState(2);
+        const [contextKey, setContextKey] = useState(weekContexts[dayOfWeek]);
+        const date = new Date(dateKey);
+
+        const handleApply = () => {
+          // Save context for this day of week
+          setWeekContexts(prev => ({ ...prev, [dayOfWeek]: contextKey }));
+          applyScenario(dateKey, scenario, opCount, contextKey);
+        };
+
+        const handleClear = () => {
+          setSchedules(prev => ({ ...prev, [dateKey]: [] }));
+          onClose();
+        };
+
+        return (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-3 text-center">
+                📅 {['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dayOfWeek]} {date.getDate()}
+              </h3>
+
+              {/* Context selector */}
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-1">Приоритет дня:</div>
+                <div className="flex gap-1">
+                  {Object.entries(CONTEXTS).map(([k, v]) => (
+                    <button
+                      key={k}
+                      onClick={() => setContextKey(k)}
+                      className={`flex-1 py-2 rounded text-xs ${contextKey === k ? 'ring-2 ring-white' : ''}`}
+                      style={{ backgroundColor: v.color + (contextKey === k ? '' : '44') }}
+                    >
+                      {v.emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scenario selector */}
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-1">Номер в очереди:</div>
+                <div className="flex gap-1">
+                  {Object.entries(SCENARIOS).map(([k, s]) => (
+                    <button
+                      key={k}
+                      onClick={() => setScenario(k)}
+                      className={`flex-1 py-2 rounded text-xs ${scenario === k ? 'bg-orange-600' : 'bg-gray-700'}`}
+                    >
+                      <div className="font-bold">{s.name}</div>
+                      <div className="text-gray-300" style={{ fontSize: '8px' }}>{s.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* OP count selector */}
+              {scenario !== 'w' && (
+                <div className="mb-4">
+                  <div className="text-xs text-gray-400 mb-1">Количество операций:</div>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => setOpCount(n)}
+                        className={`flex-1 py-3 rounded text-lg ${opCount === n ? 'bg-red-600' : 'bg-gray-700'}`}
+                      >
+                        {'🏥'.repeat(n)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={handleClear} className="px-4 py-2 bg-gray-700 rounded text-sm">🗑 Очистить</button>
+                <button onClick={onClose} className="flex-1 py-2 bg-gray-700 rounded text-sm">Отмена</button>
+                <button onClick={handleApply} className="flex-1 py-2 bg-green-600 rounded text-sm font-bold">Применить</button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="h-screen flex flex-col bg-gray-900 text-white safe-top">
+          {/* Header */}
+          <header className="bg-gray-800 border-b border-gray-700 px-2 py-1 shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🦁</span>
+              <button onClick={() => changeWeek(-1)} className="px-2 text-lg">‹</button>
+              <button onClick={goToToday} className="flex-1 text-center text-sm font-bold">
+                {weekStart.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — {weekDays[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+              </button>
+              <button onClick={() => changeWeek(1)} className="px-2 text-lg">›</button>
+            </div>
+          </header>
+
+          {/* Tabs */}
+          <div className="flex bg-gray-800 border-b border-gray-700 shrink-0">
+            {[
+              { id: 'plan', label: '📅' },
+              { id: 'triggers', label: '⚡' },
+              { id: 'goals', label: '🎯' },
+              { id: 'dump', label: '🧠' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 py-1.5 text-lg ${tab === t.id ? 'bg-orange-600' : 'text-gray-400'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* PLAN TAB */}
+          {tab === 'plan' && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Selection indicator */}
+              {(selectedBlock || movingBlock) && (
+                <div className={`px-2 py-0.5 text-center text-xs shrink-0 ${movingBlock ? 'bg-blue-800' : 'bg-green-800'}`}>
+                  {movingBlock ? '↕️ Тапни куда' : `${blocks[selectedBlock]?.emoji} Тапни на слот`}
+                </div>
+              )}
+
+              {/* Week view */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Time labels */}
+                <div className="w-5 shrink-0 bg-gray-900 overflow-y-auto no-scrollbar" style={{ paddingTop: '52px' }}>
+                  {TIME_SLOTS.map((slot) => (
+                    <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${slot.hour >= 24 ? 'text-purple-400' : slot.isHalf ? 'text-gray-800' : 'text-gray-500'}`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
+                      {!slot.isHalf && slot.label}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Days */}
+                <div className="flex-1 flex overflow-x-auto overflow-y-auto timeline-scroll">
+                  {weekDays.map((day, idx) => {
+                    const dk = formatDate(day);
+                    const prevDay = new Date(day);
+                    prevDay.setDate(prevDay.getDate() - 1);
+                    const prevDk = formatDate(prevDay);
+                    return <DayColumn key={dk} date={day} dateKey={dk} schedule={schedules[dk] || []} prevSchedule={schedules[prevDk] || []} />;
+                  })}
+                </div>
+              </div>
+
+              {/* Block library - bottom */}
+              <div className="bg-gray-800 border-t border-gray-700 p-2 shrink-0 max-h-36 overflow-y-auto">
+                <div className="space-y-1.5">
+                  {Object.entries(blocksByCategory).map(([cat, catBlocks]) => (
+                    <div key={cat}>
+                      <div className="text-gray-500 mb-0.5" style={{ fontSize: '9px' }}>{CATEGORIES[cat]?.name}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {catBlocks.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => setSelectedBlock(selectedBlock === b.id ? null : b.id)}
+                            onContextMenu={(e) => { e.preventDefault(); setShowBlockEditor(b); }}
+                            className={`flex items-center gap-1 px-1.5 py-1 rounded ${selectedBlock === b.id ? 'ring-2 ring-white' : ''}`}
+                            style={{ background: selectedBlock === b.id ? b.color : `${b.color}33`, borderLeft: `3px solid ${b.color}`, fontSize: '10px' }}
+                          >
+                            <span>{b.emoji}</span>
+                            <span className="text-white">{b.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TRIGGERS TAB */}
+          {tab === 'triggers' && (() => {
+            const triggers = getTriggers(activeScenario, todayDayOfWeek, todayContext);
+            // Приоритет: контекст из расписания > контекст дня недели
+            const contextProject = getContextFromSchedule || (todayContext === 'POLECHAT' ? 'POLECHAT' : todayContext === 'LAB' ? 'LAB' : todayContext === 'SOMALAB' ? 'SOMALAB' : null);
+            const contextDump = contextProject ? brainDump.filter(d => d.project === contextProject) : [];
+            const contextGoals = contextProject ? goals.filter(g => g.project === contextProject && !g.done) : [];
+            const hasSchedule = (schedules[todayKey] || []).length > 0;
+
+            return (
+            <div className="flex-1 overflow-auto p-2 space-y-2 safe-bottom">
+              {/* Выбор сценария */}
+              <div className="bg-gray-800 rounded-lg p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-400">Сегодня:</span>
+                  <span className="text-xs" style={{ color: CONTEXTS[todayContext]?.color }}>{CONTEXTS[todayContext]?.emoji} {CONTEXTS[todayContext]?.name}</span>
+                </div>
+                <div className="flex gap-1">
+                  {Object.entries(SCENARIOS).map(([k, s]) => (
+                    <button key={k} onClick={() => setScenarioForToday(k)} className={`flex-1 py-1.5 rounded text-xs ${activeScenario === k ? 'bg-orange-600' : 'bg-gray-700'}`}>
+                      <div className="font-bold">{s.name}</div>
+                      <div className="text-gray-300" style={{ fontSize: '8px' }}>{s.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Контекст блока — мысли + цели + метрики */}
+              {contextProject && (
+                <div className="rounded-lg p-2" style={{ backgroundColor: PROJECTS[contextProject]?.color + '22', border: `1px solid ${PROJECTS[contextProject]?.color}44` }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: PROJECTS[contextProject]?.color }}>{PROJECTS[contextProject]?.emoji}</span>
+                      <span className="text-sm font-medium">{PROJECTS[contextProject]?.name}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">{getContextFromSchedule ? '📅 из плана' : '📆 из дня'}</span>
+                  </div>
+
+                  {contextDump.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-400 mb-0.5">🧠 Мысли ({contextDump.length}):</div>
+                      <div className="space-y-0.5">
+                        {contextDump.slice(0, 3).map(d => (
+                          <div key={d.id} className="text-xs bg-gray-900/50 rounded px-1.5 py-0.5 truncate">{d.text}</div>
+                        ))}
+                        {contextDump.length > 3 && <div className="text-xs text-gray-500">+{contextDump.length - 3} ещё...</div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {contextGoals.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-400 mb-0.5">🎯 Цели:</div>
+                      <div className="space-y-0.5">
+                        {contextGoals.slice(0, 3).map(g => (
+                          <div key={g.id} onClick={() => toggleGoal(g.id)} className="flex items-center gap-1 text-xs bg-gray-900/50 rounded px-1.5 py-0.5 cursor-pointer">
+                            <div className="w-3 h-3 rounded border border-gray-600 flex items-center justify-center text-xs"></div>
+                            <span className="truncate">{g.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {METRICS_CONFIG[contextProject] && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-0.5">📊 Метрики:</div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {METRICS_CONFIG[contextProject].filter(m => m.type === 'number').slice(0, 2).map(m => (
+                          <span key={m.key} className="bg-gray-900/50 rounded px-1.5 py-0.5">
+                            {m.label}: {metrics[contextProject]?.[m.key] || 0}{m.target ? `/${m.target}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="bg-gray-800 rounded-lg p-2">
+                <div className="text-sm font-bold mb-1">🎯 Фокус недели</div>
+                <input type="text" value={weekFocus} onChange={(e) => setWeekFocus(e.target.value)} placeholder="Главная цель..." className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" />
+              </div>
+
+              {Object.entries(triggers).map(([key, cat]) => cat && (
+                <div key={key} className="bg-gray-800 rounded-lg p-2">
+                  <div className="text-xs font-medium mb-1">{cat.title}</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {cat.items.map(item => (
+                      <div key={item.key} onClick={() => setCheckedTriggers(prev => ({ ...prev, [item.key]: !prev[item.key] }))} className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer ${checkedTriggers[item.key] ? 'bg-green-900/30' : 'hover:bg-gray-700'}`} style={{ fontSize: '10px' }}>
+                        <div className={`w-3 h-3 rounded border flex items-center justify-center ${checkedTriggers[item.key] ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>
+                          {checkedTriggers[item.key] && <span style={{ fontSize: '8px' }}>✓</span>}
+                        </div>
+                        <span className="text-gray-400">{item.event}</span>
+                        <span className="text-gray-600">→</span>
+                        <span>{item.action}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setCheckedTriggers({})} className="w-full py-1 text-xs text-gray-500">Сбросить триггеры</button>
+              <div className="bg-orange-900/20 border border-orange-800 rounded p-2 text-xs text-orange-200 italic">
+                "Показал задачу, отошёл. Захватило — еду."
+              </div>
+            </div>
+          );})()}
+
+          {/* GOALS TAB */}
+          {tab === 'goals' && (
+            <div className="flex-1 overflow-auto p-2 space-y-2 safe-bottom">
+              <div className="bg-gray-800 rounded-lg p-2 space-y-1">
+                <input type="text" value={newGoalText} onChange={(e) => setNewGoalText(e.target.value)} placeholder="Новая цель..." className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onKeyDown={(e) => e.key === 'Enter' && addGoal()} />
+                <div className="flex gap-1">
+                  <select value={newGoalProject} onChange={(e) => setNewGoalProject(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs">
+                    <option value="">Проект</option>
+                    {Object.entries(PROJECTS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
+                  </select>
+                  <select value={newGoalPeriod} onChange={(e) => setNewGoalPeriod(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs">
+                    <option value="">Период</option>
+                    <option value="D">День</option>
+                    <option value="W">Неделя</option>
+                    <option value="M">Месяц</option>
+                    <option value="Q">Квартал</option>
+                  </select>
+                  <button onClick={addGoal} className="px-2 py-0.5 bg-orange-600 rounded text-xs font-bold">+</button>
+                </div>
+              </div>
+
+              {/* Фильтры по проектам */}
+              <div className="flex gap-1 flex-wrap">
+                <button onClick={() => setGoalsFilter('')} className={`px-2 py-0.5 rounded text-xs ${goalsFilter === '' ? 'bg-orange-600' : 'bg-gray-700'}`}>Все</button>
+                {Object.entries(PROJECTS).map(([k, v]) => (
+                  <button key={k} onClick={() => setGoalsFilter(k)} className={`px-2 py-0.5 rounded text-xs ${goalsFilter === k ? 'bg-orange-600' : 'bg-gray-700'}`} style={{ borderLeft: `3px solid ${v.color}` }}>
+                    {v.emoji}
+                  </button>
+                ))}
+              </div>
+
+              {/* Метрики */}
+              {goalsFilter && METRICS_CONFIG[goalsFilter] && (
+                <div className="bg-gray-800 rounded-lg p-2">
+                  <div className="flex items-center gap-1 mb-1">
+                    <span style={{ color: PROJECTS[goalsFilter]?.color }}>{PROJECTS[goalsFilter]?.emoji}</span>
+                    <span className="text-xs font-medium">Метрики недели</span>
+                  </div>
+                  <div className="space-y-1">
+                    {METRICS_CONFIG[goalsFilter].map(m => (
+                      <div key={m.key} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 flex-1">{m.label}</span>
+                        {m.type === 'number' && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => updateMetric(goalsFilter, m.key, Math.max(0, (metrics[goalsFilter]?.[m.key] || 0) - 1))} className="w-5 h-5 bg-gray-700 rounded text-xs">−</button>
+                            <span className="w-6 text-center text-sm">{metrics[goalsFilter]?.[m.key] || 0}</span>
+                            <button onClick={() => updateMetric(goalsFilter, m.key, (metrics[goalsFilter]?.[m.key] || 0) + 1)} className="w-5 h-5 bg-gray-700 rounded text-xs">+</button>
+                            {m.target && <span className="text-xs text-gray-500">/ {m.target}</span>}
+                          </div>
+                        )}
+                        {m.type === 'text' && (
+                          <input type="text" value={metrics[goalsFilter]?.[m.key] || ''} onChange={(e) => updateMetric(goalsFilter, m.key, e.target.value)} className="w-24 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs" placeholder="..." />
+                        )}
+                        {m.type === 'checkbox' && (
+                          <button onClick={() => updateMetric(goalsFilter, m.key, !metrics[goalsFilter]?.[m.key])} className={`w-5 h-5 rounded border flex items-center justify-center text-xs ${metrics[goalsFilter]?.[m.key] ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>
+                            {metrics[goalsFilter]?.[m.key] && '✓'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {[{ key: 'D', label: '📅 День' }, { key: 'W', label: '📆 Неделя' }, { key: 'M', label: '🗓 Месяц' }, { key: 'Q', label: '🎯 Квартал' }, { key: 'other', label: '📌' }].map(p => {
+                const filteredGoals = goalsByPeriod[p.key].filter(g => !goalsFilter || g.project === goalsFilter);
+                return filteredGoals.length > 0 && (
+                <div key={p.key}>
+                  <div className="text-xs text-gray-500 mb-0.5">{p.label}</div>
+                  <div className="space-y-0.5">
+                    {filteredGoals.map(g => (
+                      <div key={g.id} className={`flex items-center gap-1 p-1.5 rounded ${g.done ? 'bg-green-900/20' : 'bg-gray-800'}`}>
+                        <button onClick={() => toggleGoal(g.id)} className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${g.done ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>{g.done && '✓'}</button>
+                        <div className={`flex-1 text-sm truncate ${g.done ? 'line-through text-gray-500' : ''}`}>{g.text}</div>
+                        {g.project && <span style={{ backgroundColor: PROJECTS[g.project]?.color, fontSize: '10px' }} className="px-1 rounded">{PROJECTS[g.project]?.emoji}</span>}
+                        <button onClick={() => deleteGoal(g.id)} className="text-gray-600 hover:text-red-400 text-xs">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )})}
+            </div>
+          )}
+
+          {/* BRAIN DUMP TAB */}
+          {tab === 'dump' && (
+            <div className="flex-1 overflow-auto p-2 space-y-2 safe-bottom">
+              <div className="bg-gray-800 rounded-lg p-2 space-y-1">
+                <div className="flex gap-1">
+                  <input type="text" value={newDumpText} onChange={(e) => setNewDumpText(e.target.value)} placeholder="Мысль, идея, задача..." className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onKeyDown={(e) => e.key === 'Enter' && addDump()} />
+                  <button onClick={addDump} className="px-3 py-1 bg-orange-600 rounded font-bold">+</button>
+                </div>
+                <select value={newDumpProject} onChange={(e) => setNewDumpProject(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs">
+                  <option value="">Без проекта</option>
+                  {Object.entries(PROJECTS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
+                </select>
+              </div>
+
+              {/* Фильтры по проектам */}
+              <div className="flex gap-1 flex-wrap">
+                <button onClick={() => setDumpFilter('')} className={`px-2 py-0.5 rounded text-xs ${dumpFilter === '' ? 'bg-orange-600' : 'bg-gray-700'}`}>Все</button>
+                {Object.entries(PROJECTS).map(([k, v]) => (
+                  <button key={k} onClick={() => setDumpFilter(k)} className={`px-2 py-0.5 rounded text-xs ${dumpFilter === k ? 'bg-orange-600' : 'bg-gray-700'}`} style={{ borderLeft: `3px solid ${v.color}` }}>
+                    {v.emoji}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-0.5">
+                {brainDump.filter(item => !dumpFilter || item.project === dumpFilter).map(item => (
+                  <div key={item.id} className="flex items-center gap-1 p-1.5 bg-gray-800 rounded group">
+                    {item.project && <span style={{ backgroundColor: PROJECTS[item.project]?.color, fontSize: '10px' }} className="px-1 rounded shrink-0">{PROJECTS[item.project]?.emoji}</span>}
+                    <div className="flex-1 text-sm truncate">{item.text}</div>
+                    <button onClick={() => convertToGoal(item)} className="text-xs text-blue-400 opacity-60 hover:opacity-100">→🎯</button>
+                    <button onClick={() => deleteDump(item.id)} className="text-xs text-gray-500 opacity-60 hover:opacity-100">✕</button>
+                  </div>
+                ))}
+              </div>
+              {brainDump.filter(item => !dumpFilter || item.project === dumpFilter).length === 0 && <div className="text-center text-gray-600 py-4 text-sm">{dumpFilter ? 'Нет мыслей по этому проекту' : 'Выгрузи всё из головы ↑'}</div>}
+            </div>
+          )}
+
+          {/* Scenario Modal */}
+          {showScenarioModal && (
+            <ScenarioModal 
+              dateKey={showScenarioModal.dateKey} 
+              dayOfWeek={showScenarioModal.dayOfWeek}
+              onClose={() => setShowScenarioModal(null)} 
+            />
+          )}
+
+          {/* Block Editor */}
+          {showBlockEditor && (
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowBlockEditor(null)}>
+              <div className="bg-gray-800 rounded-xl p-4 w-full max-w-xs" onClick={e => e.stopPropagation()}>
+                <h3 className="text-sm font-bold mb-3">✏️ {showBlockEditor.name}</h3>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input type="text" value={showBlockEditor.emoji} onChange={e => setShowBlockEditor({...showBlockEditor, emoji: e.target.value})} className="w-16 bg-gray-700 rounded px-2 py-1 text-xl text-center" />
+                    <input type="color" value={showBlockEditor.color} onChange={e => setShowBlockEditor({...showBlockEditor, color: e.target.value})} className="flex-1 h-10 bg-gray-700 rounded cursor-pointer" />
+                  </div>
+                  <input type="text" value={showBlockEditor.name} onChange={e => setShowBlockEditor({...showBlockEditor, name: e.target.value})} className="w-full bg-gray-700 rounded px-2 py-1 text-sm" />
+                  <div className="flex gap-2 text-xs">
+                    <div className="flex-1"><label className="text-gray-400">Длит</label><input type="number" value={showBlockEditor.duration} onChange={e => setShowBlockEditor({...showBlockEditor, duration: +e.target.value})} className="w-full bg-gray-700 rounded px-2 py-1" /></div>
+                    <div className="flex-1"><label className="text-gray-400">Min</label><input type="number" value={showBlockEditor.minDur} onChange={e => setShowBlockEditor({...showBlockEditor, minDur: +e.target.value})} className="w-full bg-gray-700 rounded px-2 py-1" /></div>
+                    <div className="flex-1"><label className="text-gray-400">Max</label><input type="number" value={showBlockEditor.maxDur} onChange={e => setShowBlockEditor({...showBlockEditor, maxDur: +e.target.value})} className="w-full bg-gray-700 rounded px-2 py-1" /></div>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setShowBlockEditor(null)} className="flex-1 py-1.5 bg-gray-700 rounded text-sm">Отмена</button>
+                  <button onClick={() => { setBlocks(prev => ({ ...prev, [showBlockEditor.id]: showBlockEditor })); setShowBlockEditor(null); }} className="flex-1 py-1.5 bg-green-600 rounded text-sm">Сохранить</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
-    }
+    };
 
-    // Mount app
     ReactDOM.createRoot(document.getElementById('root')).render(<LevOS />);
   </script>
 </body>
