@@ -1,0 +1,11 @@
+# Private files - never push
+do not push/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
