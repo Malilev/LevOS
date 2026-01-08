@@ -14,6 +14,11 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     body { margin: 0; background: #111827; overscroll-behavior: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -30,12 +35,77 @@
 <body>
   <div id="root"></div>
 
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyAsx9QPTbMbTUUXiM2MQxNrUZUxbE13uW4",
+      authDomain: "levos2.firebaseapp.com",
+      databaseURL: "https://levos2-default-rtdb.europe-west1.firebasedatabase.app", // Обнови если другой регион
+      projectId: "levos2",
+      storageBucket: "levos2.firebasestorage.app",
+      messagingSenderId: "1045375644720",
+      appId: "1:1045375644720:web:fd0ad80d9336dfe444e9f5"
+    };
+
+    // Initialize Firebase
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Firebase sync state
+    let firebaseUserId = null;
+    let firebaseReady = false;
+    let firebaseUser = null;
+
+    // Google Auth provider
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+    // Auth state listener
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        firebaseUserId = user.uid;
+        firebaseUser = user;
+        firebaseReady = true;
+        console.log('Firebase ready, user:', user.displayName || user.uid);
+        window.dispatchEvent(new Event('firebase-ready'));
+      } else {
+        firebaseUserId = null;
+        firebaseUser = null;
+        firebaseReady = false;
+      }
+      window.dispatchEvent(new Event('firebase-auth-changed'));
+    });
+
+    // Sign in with Google
+    function signInWithGoogle() {
+      return auth.signInWithPopup(googleProvider);
+    }
+
+    // Sign out
+    function signOutFirebase() {
+      return auth.signOut();
+    }
+  </script>
+
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-    const storage = {
+    // Local storage (fallback + cache)
+    const localStorage_ = {
       get: (key, def) => { try { const item = localStorage.getItem(`levos2_${key}`); return item ? JSON.parse(item) : def; } catch { return def; } },
       set: (key, value) => { try { localStorage.setItem(`levos2_${key}`, JSON.stringify(value)); } catch {} }
+    };
+
+    // Hybrid storage: localStorage + Firebase sync
+    const storage = {
+      get: (key, def) => localStorage_.get(key, def),
+      set: (key, value) => {
+        localStorage_.set(key, value);
+        // Sync to Firebase
+        if (firebaseReady && firebaseUserId) {
+          database.ref(`users/${firebaseUserId}/${key}`).set(value);
+        }
+      }
     };
 
     const SLOT_HEIGHT = 18;
@@ -456,10 +526,129 @@
       const [showLocationPicker, setShowLocationPicker] = useState(false);
       const [almCalc, setAlmCalc] = useState({ arrivedAt: '', myOp: '', currentOp: '' });
       const [showAlmCalc, setShowAlmCalc] = useState(false);
+      const [syncStatus, setSyncStatus] = useState('connecting'); // connecting, synced, offline
+      const [user, setUser] = useState(null);
+      const [authLoading, setAuthLoading] = useState(true);
+
+      // Auth state listener
+      useEffect(() => {
+        const handleAuthChange = () => {
+          setUser(firebaseUser);
+          setAuthLoading(false);
+          if (!firebaseUser) {
+            setSyncStatus('offline');
+          }
+        };
+
+        window.addEventListener('firebase-auth-changed', handleAuthChange);
+        // Check if already signed in
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          setAuthLoading(false);
+        } else {
+          // Wait a bit for Firebase to init
+          setTimeout(() => setAuthLoading(false), 2000);
+        }
+
+        return () => window.removeEventListener('firebase-auth-changed', handleAuthChange);
+      }, []);
+
+      const handleSignIn = async () => {
+        try {
+          await signInWithGoogle();
+        } catch (error) {
+          console.error('Sign in error:', error);
+          alert('Ошибка входа: ' + error.message);
+        }
+      };
+
+      const handleSignOut = async () => {
+        if (confirm('Выйти из аккаунта?')) {
+          await signOutFirebase();
+          setSyncStatus('offline');
+        }
+      };
 
       // Refs для синхронизации скролла
       const timeLabelsRef = useRef(null);
       const daysContainerRef = useRef(null);
+
+      // Firebase real-time sync
+      useEffect(() => {
+        let unsubscribes = [];
+
+        const setupFirebaseSync = () => {
+          if (!firebaseReady || !firebaseUserId) return;
+
+          const userRef = database.ref(`users/${firebaseUserId}`);
+
+          // Слушаем изменения из Firebase
+          const syncKeys = [
+            { key: 'schedules', setter: setSchedules },
+            { key: 'goals', setter: setGoals },
+            { key: 'brainDump', setter: setBrainDump },
+            { key: 'dayScenarios', setter: setDayScenarios },
+            { key: 'metrics', setter: setMetrics },
+            { key: 'weekFocus', setter: setWeekFocus },
+            { key: 'triggers', setter: setCheckedTriggers },
+            { key: 'currentLocation', setter: setCurrentLocation },
+            { key: 'weekContexts', setter: setWeekContexts },
+          ];
+
+          syncKeys.forEach(({ key, setter }) => {
+            const ref = userRef.child(key);
+            const unsubscribe = ref.on('value', (snapshot) => {
+              const data = snapshot.val();
+              if (data !== null) {
+                localStorage_.set(key, data);
+                setter(data);
+              }
+              setSyncStatus('synced');
+            }, (error) => {
+              console.error(`Firebase sync error for ${key}:`, error);
+              setSyncStatus('offline');
+            });
+            unsubscribes.push(() => ref.off('value', unsubscribe));
+          });
+
+          // Первоначальная загрузка: если в Firebase есть данные, используем их
+          userRef.once('value').then((snapshot) => {
+            if (snapshot.exists()) {
+              console.log('Loaded data from Firebase');
+              setSyncStatus('synced');
+            } else {
+              // Если Firebase пустой, загружаем локальные данные в Firebase
+              console.log('Uploading local data to Firebase...');
+              const localData = {
+                schedules: localStorage_.get('schedules', {}),
+                goals: localStorage_.get('goals', []),
+                brainDump: localStorage_.get('brainDump', []),
+                dayScenarios: localStorage_.get('dayScenarios', {}),
+                metrics: localStorage_.get('metrics', {}),
+                weekFocus: localStorage_.get('weekFocus', ''),
+                triggers: localStorage_.get('triggers', {}),
+                currentLocation: localStorage_.get('currentLocation', null),
+                weekContexts: localStorage_.get('weekContexts', DEFAULT_WEEK_CONTEXTS),
+              };
+              userRef.set(localData).then(() => {
+                console.log('Local data uploaded to Firebase');
+                setSyncStatus('synced');
+              });
+            }
+          });
+        };
+
+        if (firebaseReady) {
+          setupFirebaseSync();
+        } else {
+          window.addEventListener('firebase-ready', setupFirebaseSync);
+        }
+
+        return () => {
+          unsubscribes.forEach(unsub => unsub());
+          window.removeEventListener('firebase-ready', setupFirebaseSync);
+        };
+      }, []);
 
       useEffect(() => { storage.set('schedules', schedules); }, [schedules]);
       useEffect(() => { storage.set('blocks', blocks); }, [blocks]);
@@ -999,17 +1188,83 @@
         );
       };
 
+      // Login screen
+      if (authLoading) {
+        return (
+          <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+            <div className="text-center">
+              <div className="text-6xl mb-4">🦁</div>
+              <div className="text-xl font-bold mb-2">LEV OS 2.0</div>
+              <div className="text-gray-500">Загрузка...</div>
+            </div>
+          </div>
+        );
+      }
+
+      if (!user) {
+        return (
+          <div className="h-screen flex items-center justify-center bg-gray-900 text-white p-4">
+            <div className="text-center max-w-sm">
+              <div className="text-6xl mb-4">🦁</div>
+              <div className="text-2xl font-bold mb-2">LEV OS 2.0</div>
+              <div className="text-gray-400 mb-6">Персональная операционная система</div>
+
+              <button
+                onClick={handleSignIn}
+                className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 rounded-lg px-4 py-3 font-medium hover:bg-gray-100 transition-colors mb-4"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Войти через Google
+              </button>
+
+              <div className="text-xs text-gray-600">
+                Данные синхронизируются между устройствами
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="h-screen flex flex-col bg-gray-900 text-white safe-top">
           {/* Header */}
           <header className="bg-gray-800 border-b border-gray-700 px-2 py-1 shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-lg">🦁</span>
+              <div className="flex items-center gap-1">
+                <span className="text-lg">🦁</span>
+                {/* Sync status indicator */}
+                <span className={`w-2 h-2 rounded-full ${
+                  syncStatus === 'synced' ? 'bg-green-500' :
+                  syncStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                  'bg-red-500'
+                }`} title={syncStatus === 'synced' ? 'Синхронизировано' : syncStatus === 'connecting' ? 'Подключение...' : 'Оффлайн'}></span>
+              </div>
               <button onClick={() => changeWeek(-1)} className="px-2 text-lg">‹</button>
               <button onClick={goToToday} className="flex-1 text-center text-sm font-bold">
                 {weekStart.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — {weekDays[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
               </button>
               <button onClick={() => changeWeek(1)} className="px-2 text-lg">›</button>
+              {/* User avatar */}
+              {user && (
+                <button
+                  onClick={handleSignOut}
+                  className="w-7 h-7 rounded-full overflow-hidden border-2 border-gray-600 hover:border-orange-500 transition-colors"
+                  title={`${user.displayName || user.email}\nНажми чтобы выйти`}
+                >
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-orange-600 flex items-center justify-center text-xs font-bold">
+                      {(user.displayName || user.email || '?')[0].toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              )}
             </div>
           </header>
 
