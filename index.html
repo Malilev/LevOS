@@ -8,12 +8,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="LEV OS 2.0">
   <title>🦁 LEV OS 2.0</title>
-  
+
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  
+
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     body { margin: 0; background: #111827; overscroll-behavior: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -29,9 +29,9 @@
 </head>
 <body>
   <div id="root"></div>
-  
+
   <script type="text/babel">
-    const { useState, useEffect, useMemo, useCallback } = React;
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
     const storage = {
       get: (key, def) => { try { const item = localStorage.getItem(`levos2_${key}`); return item ? JSON.parse(item) : def; } catch { return def; } },
@@ -40,8 +40,10 @@
 
     const SLOT_HEIGHT = 18;
     const TIME_SLOTS = [];
-    for (let i = 7; i < 24; i++) { TIME_SLOTS.push({ hour: i, label: `${i}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true }); }
-    for (let i = 0; i < 4; i++) { TIME_SLOTS.push({ hour: i + 24, label: `${i}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 24.5, label: '', isHalf: true }); }
+    // Полный день: 00:00 - 23:30 + полночь (00:00 следующего дня)
+    for (let i = 0; i < 24; i++) { TIME_SLOTS.push({ hour: i, label: `${i.toString().padStart(2, '0')}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true }); }
+    // Полночь (конец дня) - без метки, просто визуальный маркер
+    TIME_SLOTS.push({ hour: 24, label: '', isHalf: false, isMidnight: true });
 
     const roundToHalfHour = (hour) => Math.round(hour * 2) / 2;
 
@@ -96,10 +98,10 @@
     };
 
     const SCENARIOS = {
-      1: { name: '1-й', desc: 'к 9:00', wakeUp: 7, opStart: 9 },
-      2: { name: '2-й', desc: 'к 10-11', wakeUp: 8, opStart: 10.5, homeWindow: { start: 8.5, dur: 60 } },
-      3: { name: '3-й', desc: 'к 12-15', wakeUp: 10.5, opStart: 14, homeWindow: { start: 11.5, dur: 150 } },
-      4: { name: '4+', desc: '>15:00', wakeUp: 11.5, opStart: 17, homeWindow: { start: 12.5, dur: 180 }, canGym: true },
+      1: { name: '1-й', desc: 'к 8:30', wakeUp: 7.5, opStart: 8.5, arriveBy: '8:30-8:40' },
+      2: { name: '2-й', desc: 'к 10:00', wakeUp: 8.5, opStart: 10, homeWindow: { start: 9, dur: 30 }, arriveBy: '10:00' },
+      3: { name: '3-й', desc: 'к 12:00', wakeUp: 10, opStart: 12, homeWindow: { start: 10.5, dur: 60 }, arriveBy: '12:00', note: 'Позвонить уточнить! Может быть 15:00' },
+      4: { name: '4+', desc: 'к 15:00', wakeUp: 11, opStart: 15, homeWindow: { start: 11.5, dur: 180 }, canGym: true, arriveBy: '15:00' },
       w: { name: '🏠', desc: 'выходной', wakeUp: 11, isWeekend: true },
     };
 
@@ -111,80 +113,169 @@
       PERSONAL: { name: 'Личное', color: '#EAB308', emoji: '🎯' },
     };
 
-    // Динамическая генерация триггеров на основе сценария
+    // Полные триггеры с описаниями и зависимостями
     const getTriggers = (scenario, dayOfWeek, context) => {
-      const base = {
-        morning: { title: '🌅 Утро', items: [
-          { key: 'm1', event: 'Встал', action: 'зубы' },
-          { key: 'm2', event: 'Зубы', action: 'витамины' },
-          { key: 'm3', event: 'Витамины', action: 'записка' },
-        ]},
-        road: { title: '🚶 Дорога', items: [
-          { key: 'r1', event: 'Вышел', action: 'режим?' },
-          { key: 'r2', event: 'ВОССТ', action: 'YouTube' },
-          { key: 'r3', event: 'РЕАКТИВ', action: 'отвечаю' },
-          { key: 'r4', event: 'АТАКА', action: 'пишу' },
-        ]},
-        hospital: { title: '🏥 ОП', items: [
-          { key: 'h1', event: '30м', action: 'реактив' },
-          { key: 'h2', event: '60м', action: '+атаки' },
-          { key: 'h3', event: '120м+', action: 'глубоко' },
-          { key: 'h4', event: 'Вышел', action: '"еду"' },
-        ]},
-        evening: { title: '🌙 Вечер', items: [
-          { key: 'e1', event: '50м✓', action: 'задача' },
-          { key: 'e2', event: 'YT?', action: '1 дело' },
-          { key: 'e3', event: 'Прилетело', action: 'записать' },
-        ]},
-        sleep: { title: '😴 Сон', items: [
-          { key: 's1', event: 'Ложусь', action: '"завтра"' },
-          { key: 's2', event: 'Записал', action: 'зубы' },
-        ]},
+      const contextName = CONTEXTS[context]?.name || '';
+
+      const sections = [];
+
+      // 🌅 УТРО
+      const morning = {
+        id: 'morning',
+        title: '🌅 Утренняя рутина',
+        subtitle: 'Не проверять телефон до зубов',
+        items: [
+          { key: 'm1', title: 'Встал с кровати', desc: 'Туалет → сразу в ванную', anchor: 'Не брать телефон!', next: 'm2' },
+          { key: 'm2', title: 'Почистил зубы', desc: 'Витамины + стакан воды', anchor: 'Витамины у раковины', next: 'm3' },
+          { key: 'm3', title: 'Принял витамины', desc: 'Посмотреть записку "сегодня сделаю ___"', anchor: 'Записка на тумбочке', next: null },
+        ]
       };
 
-      // Добавляем специфичные триггеры по сценарию
+      // Для 3-го/4-го в очереди — большое окно
       if (scenario === '3' || scenario === '4') {
-        base.morning.items.push({ key: 'm_big', event: '⭐', action: 'большое окно!' });
-        base.morning.items.push({ key: 'm_deep', event: 'Окно', action: `работа ${CONTEXTS[context]?.name || ''}` });
+        morning.items.push({
+          key: 'm_big',
+          title: '⭐ Большое окно дома!',
+          desc: `${scenario === '3' ? '2-3 часа' : '3-4 часа'} глубокой работы. Что главное сегодня?`,
+          anchor: `Контекст: ${contextName}`,
+          highlight: true
+        });
       }
 
       if (scenario === '4') {
-        base.morning.items.push({ key: 'm_gym', event: 'ОП <15:00', action: 'можно в зал!' });
+        morning.items.push({
+          key: 'm_gym',
+          title: '🏋️ Можно в зал!',
+          desc: 'Операции после 15:00 — есть время на спорт',
+          anchor: 'Вход до 17:00',
+          highlight: true
+        });
       }
 
-      // Вторник/Четверг — офис
-      if (dayOfWeek === 2 || dayOfWeek === 4) {
-        base.hospital.items.push({ key: 'h_office', event: 'После ОП', action: 'офис' });
+      sections.push(morning);
+
+      // 🚶 ДОРОГА (не для выходных)
+      if (scenario !== 'w') {
+        sections.push({
+          id: 'road',
+          title: '🚶 Дорога до центра',
+          subtitle: '25 минут — выбери режим',
+          items: [
+            { key: 'r1', title: 'Выбрать режим', desc: 'Спросить себя: какой я сейчас?', anchor: 'Стикер на двери', isChoice: true },
+            { key: 'r_rest', title: '😴 ВОССТАНОВЛЕНИЕ', desc: 'Устал — YouTube, подкаст, музыка. Не трогать телеграм.', indent: true },
+            { key: 'r_react', title: '📨 РЕАКТИВ', desc: 'Есть непрочитанные — отвечаю. Только ответы, не инициирую.', indent: true },
+            { key: 'r_attack', title: '⚔️ АТАКА', desc: 'Энергия есть — пишу первым врачам, партнёрам, кандидатам.', indent: true },
+          ]
+        });
       }
 
-      // Выходной
-      if (scenario === 'w') {
-        base.morning = { title: '🌅 Утро выходного', items: [
-          { key: 'wm1', event: 'Встал', action: 'зубы' },
-          { key: 'wm2', event: 'Зубы', action: 'витамины' },
-          { key: 'wm3', event: 'Утро', action: 'семья' },
-        ]};
-        base.road = { title: '👨‍👩‍👧 День', items: [
-          { key: 'wd1', event: '~14:00', action: 'прогулка с Май' },
-          { key: 'wd2', event: 'Свободно', action: 'спорт' },
-        ]};
-        delete base.hospital;
+      // 🏥 ОПЕРАЦИОННАЯ (не для выходных)
+      if (scenario !== 'w') {
+        const hospital = {
+          id: 'hospital',
+          title: '🏥 В операционной',
+          subtitle: 'Окна до операции',
+          items: [
+            { key: 'h_30', title: '30 мин до ОП', desc: 'Только реактив: срочные сообщения, план дня', warn: 'Не начинать глубокое!' },
+            { key: 'h_60', title: '60 мин до ОП', desc: '+2-3 атаки, короткий звонок, прочитать статью', warn: 'Без больших документов' },
+            { key: 'h_120', title: '120+ мин до ОП', desc: 'Глубокая работа: стратегия, черновик, 5-10 атак', warn: 'Созвоны <30 мин' },
+            { key: 'h_end', title: 'Вышел из последней ОП', desc: 'Написать Диане "еду"', anchor: 'Диана ждёт', next: 'family' },
+          ]
+        };
+
+        // Спорт если ОП рано
+        if (scenario === '3' || scenario === '4') {
+          hospital.items.push({
+            key: 'h_sport',
+            title: 'ОП закончились до 15:00?',
+            desc: 'Окно для спорта! Вход в зал до 17:00',
+            highlight: true
+          });
+        }
+
+        // Офис вт/чт
+        if (dayOfWeek === 2 || dayOfWeek === 4) {
+          hospital.items.push({
+            key: 'h_office',
+            title: '🏢 После ОП → офис',
+            desc: dayOfWeek === 2 ? 'Вторник: Полечат + встречи' : 'Четверг: Лаборатория или Полечат',
+            highlight: true,
+            anchor: 'Люди в офисе ждут'
+          });
+        }
+
+        sections.push(hospital);
       }
 
-      // Воскресенье — отчёт
-      if (dayOfWeek === 0) {
-        base.evening.items.push({ key: 'e_report', event: '21:00', action: 'отчёт инвестору' });
-        base.evening.items.push({ key: 'e_review', event: 'После', action: 'обзор триггеров' });
+      // 👨‍👩‍👧 СЕМЬЯ
+      sections.push({
+        id: 'family',
+        title: '👨‍👩‍👧 Семья',
+        subtitle: scenario === 'w' ? 'Выходной день' : 'Вечер дома',
+        items: scenario === 'w' ? [
+          { key: 'f_morning', title: 'Утро с семьёй', desc: 'Завтрак, время вместе', anchor: 'Диана, Май' },
+          { key: 'f_walk', title: '~14:00 Прогулка с Май', desc: '1-2 часа на улице', anchor: 'Диана ждёт передышку' },
+          { key: 'f_sport', title: 'Свободное окно', desc: 'Спорт без ограничений по времени', highlight: true },
+        ] : [
+          { key: 'f_mai', title: '50 минут с Май', desc: 'Сразу после прихода домой — дочь', anchor: 'Диана передаёт', next: 'evening' },
+          { key: 'f_20', title: '20:00 — быть дома', desc: 'Если ещё работаю — закончить', warn: 'Дедлайн!' },
+        ]
+      });
+
+      // 🌙 ВЕЧЕР (рабочие дни)
+      if (scenario !== 'w') {
+        const evening = {
+          id: 'evening',
+          title: '🌙 Окно совы',
+          subtitle: `Контекст: ${contextName}`,
+          items: [
+            { key: 'e_start', title: '50 мин с Май закончились', desc: `Открыть записку, задача по ${contextName}`, next: 'e_work' },
+            { key: 'e_yt', title: 'Хочется YouTube?', desc: 'Сначала ОДНО действие по задаче, потом YouTube', warn: 'Не наоборот!' },
+            { key: 'e_hyper', title: '🔥 Накрыл гиперфокус', desc: 'Не мешать себе, ехать до конца. 3-6 часов.', highlight: true },
+            { key: 'e_fly', title: 'Прилетела задача', desc: 'Записать в "прилетело", вернуться к тому что делал', anchor: 'Brain dump' },
+          ]
+        };
+
+        // Воскресенье — отчёт
+        if (dayOfWeek === 0) {
+          evening.items.push({
+            key: 'e_report',
+            title: '📊 21:00 — Отчёт инвестору',
+            desc: '5 предложений. Отправлять даже если стыдно!',
+            highlight: true,
+            anchor: 'Будильник'
+          });
+          evening.items.push({
+            key: 'e_review',
+            title: 'После отчёта',
+            desc: 'Обзор триггеров: какие сработали? + фокус недели'
+          });
+        }
+
+        sections.push(evening);
       }
 
-      return base;
+      // 😴 СОН
+      sections.push({
+        id: 'sleep',
+        title: '😴 Перед сном',
+        subtitle: 'Порядок: записка → зубы → кровать',
+        items: [
+          { key: 's1', title: 'Решил ложиться', desc: `Записать: "завтра по ${contextName} сделаю: ___"`, anchor: 'Блокнот на тумбочке', next: 's2' },
+          { key: 's2', title: 'Записал', desc: 'Туалет → зубы', next: 's3' },
+          { key: 's3', title: 'Почистил зубы', desc: 'Лёг. День закрыт.', final: true },
+        ]
+      });
+
+      return sections;
     };
 
     const genId = () => Math.random().toString(36).substr(2, 9);
     const formatDate = (d) => d.toISOString().split('T')[0];
 
     const LevOS = () => {
-      const [tab, setTab] = useState('plan');
+      const [tab, setTab] = useState('dash');
+      const [dashDate, setDashDate] = useState(() => new Date());
       const [blocks, setBlocks] = useState(() => storage.get('blocks', DEFAULT_BLOCKS));
       const [schedules, setSchedules] = useState(() => storage.get('schedules', {}));
       const [weekContexts, setWeekContexts] = useState(() => storage.get('weekContexts', DEFAULT_WEEK_CONTEXTS));
@@ -202,7 +293,7 @@
         PERSONAL: { workouts: 0, maiTime: false }
       }));
       const [showBlockEditor, setShowBlockEditor] = useState(null);
-      const [showScenarioModal, setShowScenarioModal] = useState(null); // { dateKey, dayOfWeek }
+      const [showScenarioModal, setShowScenarioModal] = useState(null);
       const [newGoalText, setNewGoalText] = useState('');
       const [newGoalProject, setNewGoalProject] = useState('');
       const [newGoalPeriod, setNewGoalPeriod] = useState('');
@@ -210,7 +301,11 @@
       const [newDumpProject, setNewDumpProject] = useState('');
       const [dumpFilter, setDumpFilter] = useState('');
       const [goalsFilter, setGoalsFilter] = useState('');
-      const [todayScenario, setTodayScenario] = useState(() => storage.get('todayScenario', { date: '', scenario: '' }));
+      const [dayScenarios, setDayScenarios] = useState(() => storage.get('dayScenarios', {}));
+
+      // Refs для синхронизации скролла
+      const timeLabelsRef = useRef(null);
+      const daysContainerRef = useRef(null);
 
       useEffect(() => { storage.set('schedules', schedules); }, [schedules]);
       useEffect(() => { storage.set('blocks', blocks); }, [blocks]);
@@ -220,7 +315,21 @@
       useEffect(() => { storage.set('triggers', checkedTriggers); }, [checkedTriggers]);
       useEffect(() => { storage.set('weekFocus', weekFocus); }, [weekFocus]);
       useEffect(() => { storage.set('metrics', metrics); }, [metrics]);
-      useEffect(() => { storage.set('todayScenario', todayScenario); }, [todayScenario]);
+      useEffect(() => { storage.set('dayScenarios', dayScenarios); }, [dayScenarios]);
+
+      // Синхронизация скролла между метками времени и календарём
+      useEffect(() => {
+        const timeLabels = timeLabelsRef.current;
+        const daysContainer = daysContainerRef.current;
+        if (!timeLabels || !daysContainer) return;
+
+        const syncScroll = (e) => {
+          timeLabels.scrollTop = e.target.scrollTop;
+        };
+
+        daysContainer.addEventListener('scroll', syncScroll);
+        return () => daysContainer.removeEventListener('scroll', syncScroll);
+      }, [tab]);
 
       const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
         const d = new Date(weekStart);
@@ -239,28 +348,33 @@
         const opBlock = schedule.find(b => b.blockId && b.blockId.startsWith('OP'));
         if (!opBlock) return isWeekend ? 'w' : null;
         const opStart = opBlock.startHour;
-        if (opStart <= 9.5) return '1';
-        if (opStart <= 11.5) return '2';
-        if (opStart <= 15) return '3';
+        // 1-й: к 8:30, 2-й: к 10:00, 3-й: к 12:00, 4+: к 15:00
+        if (opStart <= 9) return '1';
+        if (opStart <= 11) return '2';
+        if (opStart <= 13) return '3';
         return '4';
       }, [isWeekend]);
 
-      // Текущий активный сценарий (гибридно)
-      const activeScenario = useMemo(() => {
-        // Если сценарий уже выбран на сегодня — используем его
-        if (todayScenario.date === todayKey && todayScenario.scenario) {
-          return todayScenario.scenario;
+      // Получить сценарий для любой даты (из сохранённого или из расписания)
+      const getScenarioForDate = useCallback((dateKey) => {
+        // Сначала проверяем сохранённый сценарий
+        if (dayScenarios[dateKey]) {
+          return dayScenarios[dateKey];
         }
-        // Иначе пытаемся определить из расписания
-        const todaySchedule = schedules[todayKey];
-        const detected = detectScenarioFromSchedule(todaySchedule);
-        return detected;
-      }, [todayKey, todayScenario, schedules, detectScenarioFromSchedule]);
+        // Иначе определяем из расписания
+        const schedule = schedules[dateKey];
+        return detectScenarioFromSchedule(schedule);
+      }, [dayScenarios, schedules, detectScenarioFromSchedule]);
 
-      // Установить сценарий на сегодня
-      const setScenarioForToday = useCallback((scenario) => {
-        setTodayScenario({ date: todayKey, scenario });
-      }, [todayKey]);
+      // Текущий активный сценарий (для сегодня)
+      const activeScenario = useMemo(() => {
+        return getScenarioForDate(todayKey);
+      }, [todayKey, getScenarioForDate]);
+
+      // Установить сценарий для даты
+      const setScenarioForDate = useCallback((dateKey, scenario) => {
+        setDayScenarios(prev => ({ ...prev, [dateKey]: scenario }));
+      }, []);
 
       // Определить текущий активный блок из расписания на сегодня
       const getCurrentActiveBlock = useCallback(() => {
@@ -268,17 +382,14 @@
         const now = new Date();
         const currentHour = now.getHours() + now.getMinutes() / 60;
 
-        // Ищем блок, в который попадает текущее время
         for (const item of todaySchedule) {
           const endHour = item.startHour + item.duration / 60;
-          // Для ночных часов (24+) нормализуем
           const normalizedStart = item.startHour >= 24 ? item.startHour - 24 : item.startHour;
           const normalizedEnd = endHour >= 24 ? endHour - 24 : endHour;
 
           if (item.startHour < 24 && currentHour >= item.startHour && currentHour < endHour) {
             return item;
           }
-          // Ночные блоки
           if (item.startHour >= 24 && currentHour >= normalizedStart && currentHour < normalizedEnd) {
             return item;
           }
@@ -290,21 +401,18 @@
       const getContextFromSchedule = useMemo(() => {
         const todaySchedule = schedules[todayKey] || [];
 
-        // Находим все рабочие блоки (Полечат, Лаб, Сомалаб)
         const workBlocks = todaySchedule.filter(b =>
           b.blockId === 'POLECHAT' || b.blockId === 'LAB' || b.blockId === 'SOMALAB'
         );
 
         if (workBlocks.length === 0) return null;
 
-        // Если есть рабочий блок — возвращаем его проект
         const blockToProject = {
           'POLECHAT': 'POLECHAT',
           'LAB': 'LAB',
           'SOMALAB': 'SOMALAB'
         };
 
-        // Возвращаем первый рабочий блок (или можно определить по времени)
         return blockToProject[workBlocks[0].blockId];
       }, [schedules, todayKey]);
 
@@ -341,34 +449,47 @@
         const opDuration = blocks[opBlockId].duration;
 
         if (scenario.isWeekend) {
-          schedule.push({ id: `SLEEP-${ts}`, blockId: 'SLEEP', startHour: 24, duration: 480 });
+          schedule.push({ id: `SLEEP-${ts}`, blockId: 'SLEEP', startHour: 27, duration: 480 }); // 03:00 -> 11:00
           schedule.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: 12, duration: 120 });
-          schedule.push({ id: `WALK-${ts}`, blockId: 'WALK', startHour: 14, duration: 90 });
-          schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT_SPA', startHour: 16, duration: 150 });
+          schedule.push({ id: `WALK-${ts}`, blockId: 'WALK', startHour: 14.5, duration: 90 });
+          schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT_SPA', startHour: 16.5, duration: 150 });
           schedule.push({ id: `HYPER-${ts}`, blockId: 'HYPER', startHour: 20, duration: 180 });
         } else {
+          // Сон: 8 часов до подъёма
           const sleepStart = scenario.wakeUp - 8 + 24;
           schedule.push({ id: `SLEEP-${ts}`, blockId: 'SLEEP', startHour: sleepStart, duration: 480 });
-          
+
+          // Домашнее окно (работа до выхода)
           if (scenario.homeWindow) {
             schedule.push({ id: `HOME-${ts}`, blockId: context.blockId, startHour: scenario.homeWindow.start, duration: scenario.homeWindow.dur });
           }
-          
+
+          // Спорт для 4-го в очереди (ДО операций, в окно дома)
+          if (scenario.canGym) {
+            schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT', startHour: 12.5, duration: 90 });
+          }
+
+          // Дорога и операции
           schedule.push({ id: `ROAD-${ts}`, blockId: 'ROAD', startHour: scenario.opStart - 0.5, duration: 25, auto: true });
           schedule.push({ id: `OP-${ts}`, blockId: opBlockId, startHour: scenario.opStart, duration: opDuration });
-          
+
           const opEnd = scenario.opStart + opDuration / 60;
           schedule.push({ id: `BUFFER-${ts}`, blockId: 'BUFFER', startHour: roundToHalfHour(opEnd), duration: 30, auto: true });
           schedule.push({ id: `ROAD2-${ts}`, blockId: 'ROAD', startHour: roundToHalfHour(opEnd + 0.5), duration: 25, auto: true });
-          
+
+          // Семья после возвращения
           const famStart = roundToHalfHour(opEnd + 1);
-          schedule.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 50, auto: true });
-          
-          schedule.push({ id: `EVE-${ts}`, blockId: context.blockId, startHour: roundToHalfHour(famStart + 1), duration: 180 });
-          
-          if (scenario.canGym) schedule.push({ id: `SPORT-${ts}`, blockId: 'SPORT', startHour: 15, duration: 90 });
+          if (famStart < 22) {
+            schedule.push({ id: `FAM-${ts}`, blockId: 'FAM', startHour: famStart, duration: 50, auto: true });
+          }
+
+          // Вечерняя работа
+          const eveStart = roundToHalfHour(famStart + 1);
+          if (eveStart < 23) {
+            schedule.push({ id: `EVE-${ts}`, blockId: context.blockId, startHour: eveStart, duration: Math.min(180, (24 - eveStart) * 60) });
+          }
         }
-        
+
         setSchedules(prev => ({ ...prev, [dateKey]: schedule }));
         setShowScenarioModal(null);
       }, [blocks]);
@@ -502,27 +623,27 @@
         const context = CONTEXTS[contextKey];
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+        const dayScenario = getScenarioForDate(dateKey);
+        const scenarioInfo = SCENARIOS[dayScenario];
 
         // Находим сон из предыдущего дня, который переливается в текущий
         const overflowSleep = useMemo(() => {
           if (!prevSchedule) return null;
           const sleepBlock = prevSchedule.find(b => b.blockId === 'SLEEP');
           if (!sleepBlock) return null;
-          // startHour >= 24 означает что это ночные часы (00:00+)
-          // Если сон начинается после полуночи и заканчивается после 4 утра (когда шкала заканчивается в prev day)
-          const endHour = sleepBlock.startHour + sleepBlock.duration / 60;
-          // Шкала заканчивается на 27.5 (03:30). Если сон заканчивается после этого — часть переливается
-          if (sleepBlock.startHour >= 24 && endHour > 28) {
-            const overflowStart = 7; // начало шкалы текущего дня
-            const overflowEnd = Math.min(endHour - 24, 12); // конец overflow (нормализуем к 7-12)
-            const overflowDuration = (overflowEnd - overflowStart) * 60;
-            if (overflowDuration > 0) {
+
+          if (sleepBlock.startHour >= 24) {
+            const sleepDurationHours = sleepBlock.duration / 60;
+            const endHour = sleepBlock.startHour - 24 + sleepDurationHours;
+            const displayDuration = Math.min(endHour, 12) * 60;
+
+            if (displayDuration > 0) {
               return {
                 ...sleepBlock,
-                startHour: overflowStart,
-                duration: overflowDuration,
+                startHour: 0,
+                duration: displayDuration,
                 isOverflow: true,
-                totalDuration: sleepBlock.duration // полная длительность для отображения
+                totalDuration: sleepBlock.duration
               };
             }
           }
@@ -532,35 +653,42 @@
         return (
           <div className="flex-1 min-w-0 border-r border-gray-800 last:border-r-0 flex flex-col">
             {/* Header */}
-            <div 
+            <div
               className={`sticky top-0 z-10 p-0.5 text-center border-b border-gray-700 cursor-pointer ${isToday ? 'bg-orange-900/50' : 'bg-gray-800'}`}
               onClick={() => setShowScenarioModal({ dateKey, dayOfWeek })}
             >
               <div className="flex items-center justify-center gap-1">
                 <span className={`font-bold ${isWeekend ? 'text-orange-300' : ''}`} style={{ fontSize: '11px' }}>{dayNames[dayOfWeek]}</span>
                 <span className={`${isToday ? 'text-orange-300' : 'text-gray-400'}`} style={{ fontSize: '11px' }}>{date.getDate()}</span>
+                {scenarioInfo && (
+                  <span className="px-1 bg-orange-600 rounded text-white" style={{ fontSize: '8px' }}>{scenarioInfo.name}</span>
+                )}
               </div>
-              <div 
-                className="px-1 py-0.5 rounded mx-0.5" 
+              <div
+                className="px-1 py-0.5 rounded mx-0.5"
                 style={{ backgroundColor: context.color + '33', color: context.color, fontSize: '9px' }}
               >
                 {context.emoji} {context.name}
               </div>
-              <div className="text-gray-500 mt-0.5" style={{ fontSize: '8px' }}>тап = план</div>
             </div>
 
             {/* Slots */}
             <div className="relative flex-1" style={{ minHeight: TIME_SLOTS.length * SLOT_HEIGHT }}>
               {TIME_SLOTS.map((slot, idx) => (
-                <div
-                  key={slot.hour}
-                  onClick={() => {
-                    if (movingBlock) moveBlock(dateKey, slot.hour);
-                    else if (selectedBlock) placeBlock(dateKey, slot.hour);
-                  }}
-                  className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.hour >= 24 ? 'bg-purple-900/10' : ''}`}
-                  style={{ top: idx * SLOT_HEIGHT, height: SLOT_HEIGHT }}
-                />
+                <div key={slot.hour}>
+                  {/* Разделитель полночь */}
+                  {slot.hour === 24 && !slot.isHalf && (
+                    <div className="absolute left-0 right-0 bg-indigo-600/50 text-center" style={{ top: idx * SLOT_HEIGHT - 1, height: 2 }}></div>
+                  )}
+                  <div
+                    onClick={() => {
+                      if (movingBlock) moveBlock(dateKey, slot.hour);
+                      else if (selectedBlock) placeBlock(dateKey, slot.hour);
+                    }}
+                    className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.isMidnight ? 'bg-indigo-900/40' : slot.hour < 7 ? 'bg-gray-900/30' : ''}`}
+                    style={{ top: idx * SLOT_HEIGHT, height: SLOT_HEIGHT }}
+                  />
+                </div>
               ))}
 
               {/* Overflow сон из предыдущего дня */}
@@ -633,14 +761,15 @@
 
       // Scenario Modal
       const ScenarioModal = ({ dateKey, dayOfWeek, onClose }) => {
-        const [scenario, setScenario] = useState('3');
+        const savedScenario = getScenarioForDate(dateKey);
+        const [scenario, setScenario] = useState(savedScenario || '3');
         const [opCount, setOpCount] = useState(2);
         const [contextKey, setContextKey] = useState(weekContexts[dayOfWeek]);
         const date = new Date(dateKey);
 
         const handleApply = () => {
-          // Save context for this day of week
           setWeekContexts(prev => ({ ...prev, [dayOfWeek]: contextKey }));
+          setScenarioForDate(dateKey, scenario); // Сохраняем сценарий
           applyScenario(dateKey, scenario, opCount, contextKey);
         };
 
@@ -656,7 +785,6 @@
                 📅 {['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dayOfWeek]} {date.getDate()}
               </h3>
 
-              {/* Context selector */}
               <div className="mb-4">
                 <div className="text-xs text-gray-400 mb-1">Приоритет дня:</div>
                 <div className="flex gap-1">
@@ -673,7 +801,6 @@
                 </div>
               </div>
 
-              {/* Scenario selector */}
               <div className="mb-4">
                 <div className="text-xs text-gray-400 mb-1">Номер в очереди:</div>
                 <div className="flex gap-1">
@@ -690,7 +817,6 @@
                 </div>
               </div>
 
-              {/* OP count selector */}
               {scenario !== 'w' && (
                 <div className="mb-4">
                   <div className="text-xs text-gray-400 mb-1">Количество операций:</div>
@@ -735,6 +861,7 @@
           {/* Tabs */}
           <div className="flex bg-gray-800 border-b border-gray-700 shrink-0">
             {[
+              { id: 'dash', label: '🏠' },
               { id: 'plan', label: '📅' },
               { id: 'triggers', label: '⚡' },
               { id: 'goals', label: '🎯' },
@@ -745,6 +872,390 @@
               </button>
             ))}
           </div>
+
+          {/* DASHBOARD TAB */}
+          {tab === 'dash' && (() => {
+            const dashDateKey = formatDate(dashDate);
+            const dashDayOfWeek = dashDate.getDay();
+            const dashContext = weekContexts[dashDayOfWeek];
+            const dashSchedule = schedules[dashDateKey] || [];
+            const dayNames = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+            const shortDayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+            // Сценарий для выбранного дня (из общего хранилища)
+            const dayScenario = getScenarioForDate(dashDateKey);
+            const scenarioInfo = SCENARIOS[dayScenario];
+
+            // Время подъёма и сна из расписания
+            const sleepBlock = dashSchedule.find(b => b.blockId === 'SLEEP');
+            const wakeUpTime = sleepBlock ? (() => {
+              const sleepEnd = sleepBlock.startHour + sleepBlock.duration / 60;
+              const normalizedEnd = sleepEnd >= 24 ? sleepEnd - 24 : sleepEnd;
+              return `${Math.floor(normalizedEnd)}:${String(Math.round((normalizedEnd % 1) * 60)).padStart(2, '0')}`;
+            })() : scenarioInfo?.wakeUp ? `${Math.floor(scenarioInfo.wakeUp)}:${String(Math.round((scenarioInfo.wakeUp % 1) * 60)).padStart(2, '0')}` : '?';
+
+            const sleepStartTime = sleepBlock ? (() => {
+              const h = sleepBlock.startHour >= 24 ? sleepBlock.startHour - 24 : sleepBlock.startHour;
+              return `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+            })() : '?';
+
+            // Находим ключевые блоки
+            const opBlock = dashSchedule.find(b => b.blockId && b.blockId.startsWith('OP'));
+            const famBlock = dashSchedule.find(b => b.blockId === 'FAM');
+            const sportBlock = dashSchedule.find(b => b.blockId === 'SPORT' || b.blockId === 'SPORT_SPA');
+            const workBlocks = dashSchedule.filter(b => ['POLECHAT', 'LAB', 'SOMALAB', 'HYPER'].includes(b.blockId));
+
+            // Вычисляем домашнее окно
+            const homeWindow = (() => {
+              if (!opBlock) return null;
+              const roadBlock = dashSchedule.find(b => b.blockId === 'ROAD' && b.startHour < opBlock.startHour);
+              if (!roadBlock) return null;
+              const wakeUpHour = sleepBlock ? (sleepBlock.startHour + sleepBlock.duration / 60) : (scenarioInfo?.wakeUp || 7);
+              const normalizedWakeUp = wakeUpHour >= 24 ? wakeUpHour - 24 : wakeUpHour;
+              const windowDuration = Math.round((roadBlock.startHour - normalizedWakeUp) * 60);
+              if (windowDuration <= 30) return null;
+              return { start: normalizedWakeUp, duration: windowDuration };
+            })();
+
+            // Создаём события таймлайна
+            const timelineEvents = [];
+
+            // Подъём
+            if (sleepBlock || scenarioInfo?.wakeUp) {
+              timelineEvents.push({
+                time: wakeUpTime,
+                emoji: '😴',
+                title: 'Подъём',
+                subtitle: 'зубы → витамины',
+                color: '#6366F1'
+              });
+            }
+
+            // Домашнее окно
+            if (homeWindow && homeWindow.duration > 30) {
+              const hours = Math.floor(homeWindow.duration / 60);
+              const mins = homeWindow.duration % 60;
+              timelineEvents.push({
+                time: `${Math.floor(homeWindow.start + 0.5)}:${String(Math.round(((homeWindow.start + 0.5) % 1) * 60)).padStart(2, '0')}`,
+                emoji: '🔥',
+                title: `ОКНО ${hours > 0 ? hours + 'ч' : ''}${mins > 0 ? ' ' + mins + 'м' : ''}`,
+                subtitle: CONTEXTS[dashContext]?.name || 'работа',
+                color: '#F59E0B',
+                highlight: true
+              });
+            }
+
+            // Спорт (если доступен)
+            if (sportBlock) {
+              timelineEvents.push({
+                time: `${Math.floor(sportBlock.startHour)}:${String(Math.round((sportBlock.startHour % 1) * 60)).padStart(2, '0')}`,
+                emoji: '🏋️',
+                title: blocks[sportBlock.blockId]?.name || 'Спорт',
+                subtitle: 'вход до 17:00!',
+                color: '#22C55E',
+                highlight: true
+              });
+            } else if (dayScenario === '4') {
+              timelineEvents.push({
+                time: '~15:00',
+                emoji: '🏋️',
+                title: 'МОЖНО ЗАЛ',
+                subtitle: 'вход до 17:00!',
+                color: '#22C55E',
+                highlight: true,
+                optional: true
+              });
+            }
+
+            // Дорога
+            const roadToOp = dashSchedule.find(b => b.blockId === 'ROAD' && opBlock && b.startHour < opBlock.startHour && b.startHour > (homeWindow?.start || 0));
+            if (roadToOp) {
+              timelineEvents.push({
+                time: `${Math.floor(roadToOp.startHour)}:${String(Math.round((roadToOp.startHour % 1) * 60)).padStart(2, '0')}`,
+                emoji: '🚶',
+                title: 'Дорога',
+                subtitle: '',
+                color: '#4B5563'
+              });
+            }
+
+            // Операции
+            if (opBlock) {
+              timelineEvents.push({
+                time: `${Math.floor(opBlock.startHour)}:${String(Math.round((opBlock.startHour % 1) * 60)).padStart(2, '0')}`,
+                emoji: '🏥',
+                title: 'Операции',
+                subtitle: blocks[opBlock.blockId]?.name || '',
+                color: '#EF4444'
+              });
+
+              const opEnd = opBlock.startHour + opBlock.duration / 60;
+              timelineEvents.push({
+                time: `~${Math.floor(opEnd)}:${String(Math.round((opEnd % 1) * 60)).padStart(2, '0')}`,
+                emoji: '✅',
+                title: 'Конец ОП',
+                subtitle: '',
+                color: '#22C55E'
+              });
+            }
+
+            // 50 мин Май
+            if (famBlock) {
+              timelineEvents.push({
+                time: `${Math.floor(famBlock.startHour)}:${String(Math.round((famBlock.startHour % 1) * 60)).padStart(2, '0')}`,
+                emoji: '👨‍👩‍👧',
+                title: '50 мин Май',
+                subtitle: '',
+                color: '#A855F7'
+              });
+            }
+
+            // Вечерняя работа
+            workBlocks.filter(b => b.startHour >= 19).forEach(b => {
+              timelineEvents.push({
+                time: `${Math.floor(b.startHour)}:${String(Math.round((b.startHour % 1) * 60)).padStart(2, '0')}`,
+                emoji: b.blockId === 'HYPER' ? '🔥' : PROJECTS[b.blockId]?.emoji || '💼',
+                title: b.blockId === 'HYPER' ? 'Гиперфокус' : 'Окно совы',
+                subtitle: PROJECTS[b.blockId]?.name || 'работа',
+                color: blocks[b.blockId]?.color || '#F59E0B'
+              });
+            });
+
+            // Сон
+            if (sleepBlock) {
+              timelineEvents.push({
+                time: sleepStartTime,
+                emoji: '📝',
+                title: 'Записка',
+                subtitle: '→ зубы → сон',
+                color: '#6366F1'
+              });
+            }
+
+            // Сортируем по времени
+            timelineEvents.sort((a, b) => {
+              const parseTime = (t) => {
+                const clean = t.replace('~', '');
+                const [h, m] = clean.split(':').map(Number);
+                return h + m / 60;
+              };
+              return parseTime(a.time) - parseTime(b.time);
+            });
+
+            // Цели на день
+            const dayGoals = goals.filter(g => g.period === 'D' && !g.done && (!g.project || g.project === dashContext));
+            const weekGoal = goals.find(g => g.period === 'W' && !g.done);
+
+            const changeDashDay = (delta) => {
+              const newDate = new Date(dashDate);
+              newDate.setDate(newDate.getDate() + delta);
+              setDashDate(newDate);
+            };
+
+            const goToDashToday = () => setDashDate(new Date());
+            const isToday = dashDateKey === todayKey;
+
+            return (
+              <div className="flex-1 overflow-auto safe-bottom">
+                {/* Навигация по дням */}
+                <div className="bg-gray-800 border-b border-gray-700 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => changeDashDay(-1)} className="px-3 py-1 text-xl">‹</button>
+                    <button onClick={goToDashToday} className="flex-1 text-center">
+                      <div className={`text-lg font-bold ${isToday ? 'text-orange-400' : ''}`}>
+                        {dayNames[dashDayOfWeek]}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {dashDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+                        {isToday && <span className="text-orange-400 ml-2">сегодня</span>}
+                      </div>
+                    </button>
+                    <button onClick={() => changeDashDay(1)} className="px-3 py-1 text-xl">›</button>
+                  </div>
+                </div>
+
+                <div className="p-3 space-y-3">
+                  {/* Карточка сценария */}
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="text-2xl font-bold flex items-center gap-2">
+                          {dayScenario ? (
+                            <>
+                              {scenarioInfo?.name}
+                              <span className="text-sm font-normal text-gray-400">в очереди</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-500">Выбери сценарий</span>
+                          )}
+                        </div>
+                        {scenarioInfo && (
+                          <div className="text-sm text-gray-400">{scenarioInfo.desc}</div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="px-2 py-1 rounded-lg" style={{ backgroundColor: CONTEXTS[dashContext]?.color + '33', color: CONTEXTS[dashContext]?.color }}>
+                          {CONTEXTS[dashContext]?.emoji} {CONTEXTS[dashContext]?.name}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Выбор сценария */}
+                    <div className="flex gap-1 mb-3">
+                      {Object.entries(SCENARIOS).map(([k, s]) => (
+                        <button
+                          key={k}
+                          onClick={() => setScenarioForDate(dashDateKey, k)}
+                          className={`flex-1 py-1.5 rounded text-xs transition-all ${dayScenario === k ? 'bg-orange-600 ring-2 ring-orange-400' : 'bg-gray-700 hover:bg-gray-600'}`}
+                        >
+                          <div className="font-bold">{s.name}</div>
+                          <div className="text-gray-300" style={{ fontSize: '8px' }}>{s.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Ключевые метрики дня */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-gray-900 rounded-lg p-2 text-center">
+                        <div className="text-xs text-gray-500">Подъём</div>
+                        <div className="text-xl font-bold text-indigo-400">{wakeUpTime}</div>
+                      </div>
+                      <div className="bg-gray-900 rounded-lg p-2 text-center">
+                        <div className="text-xs text-gray-500">Сон</div>
+                        <div className="text-xl font-bold text-indigo-400">{sleepStartTime}</div>
+                      </div>
+                    </div>
+
+                    {/* Ключевые факты */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {dayScenario === '3' && (
+                        <div className="px-2 py-1 bg-red-900/30 text-red-300 rounded-lg text-sm">
+                          ⚠️ Позвонить! Может быть 15:00
+                        </div>
+                      )}
+                      {homeWindow && (
+                        <div className="px-2 py-1 bg-yellow-900/30 text-yellow-300 rounded-lg text-sm">
+                          🏠 Окно: {Math.floor(homeWindow.duration / 60)}-{Math.ceil(homeWindow.duration / 60)} часа
+                        </div>
+                      )}
+                      {(sportBlock || dayScenario === '4') && (
+                        <div className="px-2 py-1 bg-green-900/30 text-green-300 rounded-lg text-sm">
+                          🏋️ Можно в зал
+                        </div>
+                      )}
+                      {dashDayOfWeek === 2 && (
+                        <div className="px-2 py-1 bg-blue-900/30 text-blue-300 rounded-lg text-sm">
+                          🏢 Офис Полечат
+                        </div>
+                      )}
+                      {dashDayOfWeek === 4 && (
+                        <div className="px-2 py-1 bg-purple-900/30 text-purple-300 rounded-lg text-sm">
+                          🏢 Офис Лаб
+                        </div>
+                      )}
+                      {dashDayOfWeek === 0 && (
+                        <div className="px-2 py-1 bg-orange-900/30 text-orange-300 rounded-lg text-sm">
+                          📊 21:00 Отчёт
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Таймлайн дня */}
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <div className="text-sm font-bold mb-3 text-gray-400">Таймлайн дня</div>
+
+                    {timelineEvents.length > 0 ? (
+                      <div className="relative">
+                        {/* Вертикальная линия */}
+                        <div className="absolute left-[52px] top-2 bottom-2 w-0.5 bg-gray-700"></div>
+
+                        <div className="space-y-3">
+                          {timelineEvents.map((event, idx) => (
+                            <div key={idx} className={`flex items-start gap-3 ${event.optional ? 'opacity-60' : ''}`}>
+                              {/* Время */}
+                              <div className="w-12 text-right text-sm text-gray-500 pt-1 shrink-0">
+                                {event.time}
+                              </div>
+
+                              {/* Точка на линии */}
+                              <div
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-xs shrink-0 z-10 ${event.highlight ? 'ring-2 ring-offset-2 ring-offset-gray-800' : ''}`}
+                                style={{ backgroundColor: event.color, ringColor: event.color }}
+                              >
+                                {event.emoji}
+                              </div>
+
+                              {/* Контент */}
+                              <div className="flex-1 min-w-0">
+                                <div className={`font-medium ${event.highlight ? 'text-yellow-300' : ''}`}>
+                                  {event.title}
+                                </div>
+                                {event.subtitle && (
+                                  <div className="text-xs text-gray-500">{event.subtitle}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-gray-600 py-4">
+                        <div className="text-3xl mb-2">📅</div>
+                        <div>Нет событий на этот день</div>
+                        <button
+                          onClick={() => { setTab('plan'); }}
+                          className="mt-2 px-3 py-1 bg-orange-600 rounded text-sm"
+                        >
+                          Создать план
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Цели */}
+                  {(dayGoals.length > 0 || weekGoal || weekFocus) && (
+                    <div className="bg-gray-800 rounded-xl p-3">
+                      <div className="text-sm font-bold mb-2 text-gray-400">🎯 Цели</div>
+
+                      {weekFocus && (
+                        <div className="bg-orange-900/20 border border-orange-800 rounded-lg p-2 mb-2">
+                          <div className="text-xs text-orange-400 mb-0.5">Фокус недели</div>
+                          <div className="text-sm">{weekFocus}</div>
+                        </div>
+                      )}
+
+                      {weekGoal && (
+                        <div className="flex items-center gap-2 bg-gray-900 rounded-lg p-2 mb-1">
+                          <span className="text-xs text-gray-500">📆</span>
+                          <span className="text-sm flex-1">{weekGoal.text}</span>
+                        </div>
+                      )}
+
+                      {dayGoals.map(g => (
+                        <div key={g.id} onClick={() => toggleGoal(g.id)} className="flex items-center gap-2 bg-gray-900 rounded-lg p-2 mb-1 cursor-pointer">
+                          <div className="w-4 h-4 rounded border border-gray-600"></div>
+                          <span className="text-sm flex-1">{g.text}</span>
+                          {g.project && (
+                            <span className="text-xs px-1 rounded" style={{ backgroundColor: PROJECTS[g.project]?.color + '44' }}>
+                              {PROJECTS[g.project]?.emoji}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Мотивационная цитата */}
+                  <div className="bg-gray-800/50 rounded-xl p-3 text-center">
+                    <div className="text-sm text-gray-500 italic">
+                      "Показал задачу, отошёл. Захватило — еду."
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* PLAN TAB */}
           {tab === 'plan' && (
@@ -758,17 +1269,21 @@
 
               {/* Week view */}
               <div className="flex-1 flex overflow-hidden">
-                {/* Time labels */}
-                <div className="w-5 shrink-0 bg-gray-900 overflow-y-auto no-scrollbar" style={{ paddingTop: '52px' }}>
+                {/* Time labels - синхронизированы с календарём */}
+                <div ref={timeLabelsRef} className="w-5 shrink-0 bg-gray-900 overflow-hidden no-scrollbar" style={{ paddingTop: '52px' }}>
                   {TIME_SLOTS.map((slot) => (
-                    <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${slot.hour >= 24 ? 'text-purple-400' : slot.isHalf ? 'text-gray-800' : 'text-gray-500'}`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
+                    <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${
+                      slot.isMidnight ? 'text-indigo-400 font-bold' :
+                      slot.hour < 7 ? 'text-gray-600' :
+                      slot.isHalf ? 'text-gray-800' : 'text-gray-500'
+                    }`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
                       {!slot.isHalf && slot.label}
                     </div>
                   ))}
                 </div>
 
                 {/* Days */}
-                <div className="flex-1 flex overflow-x-auto overflow-y-auto timeline-scroll">
+                <div ref={daysContainerRef} className="flex-1 flex overflow-x-auto overflow-y-auto timeline-scroll">
                   {weekDays.map((day, idx) => {
                     const dk = formatDate(day);
                     const prevDay = new Date(day);
@@ -809,7 +1324,6 @@
           {/* TRIGGERS TAB */}
           {tab === 'triggers' && (() => {
             const triggers = getTriggers(activeScenario, todayDayOfWeek, todayContext);
-            // Приоритет: контекст из расписания > контекст дня недели
             const contextProject = getContextFromSchedule || (todayContext === 'POLECHAT' ? 'POLECHAT' : todayContext === 'LAB' ? 'LAB' : todayContext === 'SOMALAB' ? 'SOMALAB' : null);
             const contextDump = contextProject ? brainDump.filter(d => d.project === contextProject) : [];
             const contextGoals = contextProject ? goals.filter(g => g.project === contextProject && !g.done) : [];
@@ -825,7 +1339,7 @@
                 </div>
                 <div className="flex gap-1">
                   {Object.entries(SCENARIOS).map(([k, s]) => (
-                    <button key={k} onClick={() => setScenarioForToday(k)} className={`flex-1 py-1.5 rounded text-xs ${activeScenario === k ? 'bg-orange-600' : 'bg-gray-700'}`}>
+                    <button key={k} onClick={() => setScenarioForDate(todayKey, k)} className={`flex-1 py-1.5 rounded text-xs ${activeScenario === k ? 'bg-orange-600' : 'bg-gray-700'}`}>
                       <div className="font-bold">{s.name}</div>
                       <div className="text-gray-300" style={{ fontSize: '8px' }}>{s.desc}</div>
                     </button>
@@ -890,24 +1404,81 @@
                 <input type="text" value={weekFocus} onChange={(e) => setWeekFocus(e.target.value)} placeholder="Главная цель..." className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" />
               </div>
 
-              {Object.entries(triggers).map(([key, cat]) => cat && (
-                <div key={key} className="bg-gray-800 rounded-lg p-2">
-                  <div className="text-xs font-medium mb-1">{cat.title}</div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {cat.items.map(item => (
-                      <div key={item.key} onClick={() => setCheckedTriggers(prev => ({ ...prev, [item.key]: !prev[item.key] }))} className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer ${checkedTriggers[item.key] ? 'bg-green-900/30' : 'hover:bg-gray-700'}`} style={{ fontSize: '10px' }}>
-                        <div className={`w-3 h-3 rounded border flex items-center justify-center ${checkedTriggers[item.key] ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>
-                          {checkedTriggers[item.key] && <span style={{ fontSize: '8px' }}>✓</span>}
+              {triggers.map(section => (
+                <div key={section.id} className="bg-gray-800 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-700/50 border-b border-gray-700">
+                    <div className="font-medium text-sm">{section.title}</div>
+                    {section.subtitle && <div className="text-xs text-gray-400">{section.subtitle}</div>}
+                  </div>
+
+                  <div className="divide-y divide-gray-700/50">
+                    {section.items.map(item => (
+                      <div
+                        key={item.key}
+                        onClick={() => setCheckedTriggers(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                        className={`px-3 py-2 cursor-pointer transition-colors ${
+                          checkedTriggers[item.key] ? 'bg-green-900/30' : 'hover:bg-gray-700/50'
+                        } ${item.indent ? 'pl-8' : ''} ${item.highlight ? 'bg-orange-900/20' : ''}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                            checkedTriggers[item.key]
+                              ? 'bg-green-600 border-green-600'
+                              : item.highlight ? 'border-orange-500' : 'border-gray-500'
+                          }`}>
+                            {checkedTriggers[item.key] && <span className="text-white text-xs">✓</span>}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-sm ${checkedTriggers[item.key] ? 'line-through text-gray-500' : ''}`}>
+                              {item.title}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>
+
+                            {(item.anchor || item.warn) && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.anchor && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-blue-900/40 text-blue-300 rounded">
+                                    📍 {item.anchor}
+                                  </span>
+                                )}
+                                {item.warn && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-red-900/40 text-red-300 rounded">
+                                    ⚠️ {item.warn}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {item.next && !checkedTriggers[item.key] && (
+                              <div className="text-xs text-gray-600 mt-1">↓ далее</div>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-gray-400">{item.event}</span>
-                        <span className="text-gray-600">→</span>
-                        <span>{item.action}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               ))}
-              <button onClick={() => setCheckedTriggers({})} className="w-full py-1 text-xs text-gray-500">Сбросить триггеры</button>
+
+              {(() => {
+                const allKeys = triggers.flatMap(s => s.items.map(i => i.key));
+                const checked = allKeys.filter(k => checkedTriggers[k]).length;
+                const percent = Math.round(checked / allKeys.length * 100);
+                return (
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span>Прогресс дня</span>
+                      <span className="text-green-400">{checked}/{allKeys.length} ({percent}%)</span>
+                    </div>
+                    <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-600 transition-all" style={{ width: `${percent}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <button onClick={() => setCheckedTriggers({})} className="w-full py-2 text-xs text-gray-500 hover:text-gray-300">Сбросить все триггеры</button>
               <div className="bg-orange-900/20 border border-orange-800 rounded p-2 text-xs text-orange-200 italic">
                 "Показал задачу, отошёл. Захватило — еду."
               </div>
@@ -915,133 +1486,350 @@
           );})()}
 
           {/* GOALS TAB */}
-          {tab === 'goals' && (
-            <div className="flex-1 overflow-auto p-2 space-y-2 safe-bottom">
-              <div className="bg-gray-800 rounded-lg p-2 space-y-1">
-                <input type="text" value={newGoalText} onChange={(e) => setNewGoalText(e.target.value)} placeholder="Новая цель..." className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onKeyDown={(e) => e.key === 'Enter' && addGoal()} />
-                <div className="flex gap-1">
-                  <select value={newGoalProject} onChange={(e) => setNewGoalProject(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs">
-                    <option value="">Проект</option>
-                    {Object.entries(PROJECTS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
-                  </select>
-                  <select value={newGoalPeriod} onChange={(e) => setNewGoalPeriod(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs">
-                    <option value="">Период</option>
-                    <option value="D">День</option>
-                    <option value="W">Неделя</option>
-                    <option value="M">Месяц</option>
-                    <option value="Q">Квартал</option>
-                  </select>
-                  <button onClick={addGoal} className="px-2 py-0.5 bg-orange-600 rounded text-xs font-bold">+</button>
+          {tab === 'goals' && (() => {
+            const totalGoals = goals.length;
+            const completedGoals = goals.filter(g => g.done).length;
+            const progressPercent = totalGoals > 0 ? Math.round(completedGoals / totalGoals * 100) : 0;
+
+            return (
+            <div className="flex-1 overflow-auto safe-bottom">
+              {/* Заголовок с прогрессом */}
+              <div className="bg-gray-800 border-b border-gray-700 px-3 py-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-lg font-bold">🎯 Цели</div>
+                  <div className="text-sm text-gray-400">{completedGoals}/{totalGoals}</div>
+                </div>
+                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-green-500 transition-all" style={{ width: `${progressPercent}%` }}></div>
                 </div>
               </div>
 
-              {/* Фильтры по проектам */}
-              <div className="flex gap-1 flex-wrap">
-                <button onClick={() => setGoalsFilter('')} className={`px-2 py-0.5 rounded text-xs ${goalsFilter === '' ? 'bg-orange-600' : 'bg-gray-700'}`}>Все</button>
-                {Object.entries(PROJECTS).map(([k, v]) => (
-                  <button key={k} onClick={() => setGoalsFilter(k)} className={`px-2 py-0.5 rounded text-xs ${goalsFilter === k ? 'bg-orange-600' : 'bg-gray-700'}`} style={{ borderLeft: `3px solid ${v.color}` }}>
-                    {v.emoji}
-                  </button>
-                ))}
-              </div>
-
-              {/* Метрики */}
-              {goalsFilter && METRICS_CONFIG[goalsFilter] && (
-                <div className="bg-gray-800 rounded-lg p-2">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span style={{ color: PROJECTS[goalsFilter]?.color }}>{PROJECTS[goalsFilter]?.emoji}</span>
-                    <span className="text-xs font-medium">Метрики недели</span>
+              <div className="p-3 space-y-3">
+                {/* Добавление цели */}
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="text-sm font-bold mb-2 text-gray-400">Добавить цель</div>
+                  <input
+                    type="text"
+                    value={newGoalText}
+                    onChange={(e) => setNewGoalText(e.target.value)}
+                    placeholder="Что нужно сделать?"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-2"
+                    onKeyDown={(e) => e.key === 'Enter' && addGoal()}
+                  />
+                  <div className="flex gap-2">
+                    <select value={newGoalProject} onChange={(e) => setNewGoalProject(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs">
+                      <option value="">📁 Проект</option>
+                      {Object.entries(PROJECTS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
+                    </select>
+                    <select value={newGoalPeriod} onChange={(e) => setNewGoalPeriod(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs">
+                      <option value="">⏰ Срок</option>
+                      <option value="D">День</option>
+                      <option value="W">Неделя</option>
+                      <option value="M">Месяц</option>
+                      <option value="Q">Квартал</option>
+                    </select>
+                    <button onClick={addGoal} className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm font-bold transition-colors">+</button>
                   </div>
-                  <div className="space-y-1">
-                    {METRICS_CONFIG[goalsFilter].map(m => (
-                      <div key={m.key} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 flex-1">{m.label}</span>
-                        {m.type === 'number' && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => updateMetric(goalsFilter, m.key, Math.max(0, (metrics[goalsFilter]?.[m.key] || 0) - 1))} className="w-5 h-5 bg-gray-700 rounded text-xs">−</button>
-                            <span className="w-6 text-center text-sm">{metrics[goalsFilter]?.[m.key] || 0}</span>
-                            <button onClick={() => updateMetric(goalsFilter, m.key, (metrics[goalsFilter]?.[m.key] || 0) + 1)} className="w-5 h-5 bg-gray-700 rounded text-xs">+</button>
-                            {m.target && <span className="text-xs text-gray-500">/ {m.target}</span>}
+                </div>
+
+                {/* Фильтры по проектам */}
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setGoalsFilter('')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${goalsFilter === '' ? 'bg-orange-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    >
+                      Все
+                    </button>
+                    {Object.entries(PROJECTS).map(([k, v]) => (
+                      <button
+                        key={k}
+                        onClick={() => setGoalsFilter(k)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${goalsFilter === k ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
+                        style={{
+                          backgroundColor: goalsFilter === k ? v.color : `${v.color}33`,
+                          color: goalsFilter === k ? 'white' : v.color,
+                          '--tw-ring-color': v.color
+                        }}
+                      >
+                        {v.emoji} {v.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Метрики проекта */}
+                {goalsFilter && METRICS_CONFIG[goalsFilter] && (
+                  <div className="rounded-xl p-3" style={{ backgroundColor: PROJECTS[goalsFilter]?.color + '22', border: `1px solid ${PROJECTS[goalsFilter]?.color}44` }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{PROJECTS[goalsFilter]?.emoji}</span>
+                      <div>
+                        <div className="font-bold">{PROJECTS[goalsFilter]?.name}</div>
+                        <div className="text-xs text-gray-400">Метрики недели</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {METRICS_CONFIG[goalsFilter].map(m => (
+                        <div key={m.key} className="bg-gray-900/50 rounded-lg p-2">
+                          <div className="text-xs text-gray-400 mb-1">{m.label}</div>
+                          {m.type === 'number' && (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => updateMetric(goalsFilter, m.key, Math.max(0, (metrics[goalsFilter]?.[m.key] || 0) - 1))} className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">−</button>
+                              <span className="text-xl font-bold flex-1 text-center">{metrics[goalsFilter]?.[m.key] || 0}{m.target && <span className="text-sm text-gray-500">/{m.target}</span>}</span>
+                              <button onClick={() => updateMetric(goalsFilter, m.key, (metrics[goalsFilter]?.[m.key] || 0) + 1)} className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">+</button>
+                            </div>
+                          )}
+                          {m.type === 'text' && (
+                            <input type="text" value={metrics[goalsFilter]?.[m.key] || ''} onChange={(e) => updateMetric(goalsFilter, m.key, e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm" placeholder="..." />
+                          )}
+                          {m.type === 'checkbox' && (
+                            <button onClick={() => updateMetric(goalsFilter, m.key, !metrics[goalsFilter]?.[m.key])} className={`w-full py-2 rounded-lg font-medium transition-colors ${metrics[goalsFilter]?.[m.key] ? 'bg-green-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                              {metrics[goalsFilter]?.[m.key] ? '✓ Да' : 'Нет'}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Списки целей по периодам */}
+                {[
+                  { key: 'D', label: 'Сегодня', emoji: '📅', color: '#EF4444' },
+                  { key: 'W', label: 'Эта неделя', emoji: '📆', color: '#F59E0B' },
+                  { key: 'M', label: 'Этот месяц', emoji: '🗓', color: '#3B82F6' },
+                  { key: 'Q', label: 'Квартал', emoji: '🎯', color: '#8B5CF6' },
+                  { key: 'other', label: 'Без срока', emoji: '📌', color: '#6B7280' }
+                ].map(p => {
+                  const filteredGoals = goalsByPeriod[p.key].filter(g => !goalsFilter || g.project === goalsFilter);
+                  const periodCompleted = filteredGoals.filter(g => g.done).length;
+                  const periodTotal = filteredGoals.length;
+
+                  return filteredGoals.length > 0 && (
+                    <div key={p.key} className="bg-gray-800 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between" style={{ borderLeftWidth: '3px', borderLeftColor: p.color }}>
+                        <div className="flex items-center gap-2">
+                          <span>{p.emoji}</span>
+                          <span className="font-medium text-sm">{p.label}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{periodCompleted}/{periodTotal}</span>
+                      </div>
+                      <div className="divide-y divide-gray-700/50">
+                        {filteredGoals.map(g => (
+                          <div
+                            key={g.id}
+                            className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${g.done ? 'bg-green-900/10' : 'hover:bg-gray-700/30'}`}
+                          >
+                            <button
+                              onClick={() => toggleGoal(g.id)}
+                              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${g.done ? 'bg-green-600 border-green-600' : 'border-gray-500 hover:border-green-500'}`}
+                            >
+                              {g.done && <span className="text-white text-xs">✓</span>}
+                            </button>
+                            <div className={`flex-1 text-sm ${g.done ? 'line-through text-gray-500' : ''}`}>{g.text}</div>
+                            {g.project && (
+                              <span className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: PROJECTS[g.project]?.color + '33', color: PROJECTS[g.project]?.color }}>
+                                {PROJECTS[g.project]?.emoji}
+                              </span>
+                            )}
+                            <button onClick={() => deleteGoal(g.id)} className="text-gray-600 hover:text-red-400 transition-colors text-sm">✕</button>
                           </div>
-                        )}
-                        {m.type === 'text' && (
-                          <input type="text" value={metrics[goalsFilter]?.[m.key] || ''} onChange={(e) => updateMetric(goalsFilter, m.key, e.target.value)} className="w-24 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-xs" placeholder="..." />
-                        )}
-                        {m.type === 'checkbox' && (
-                          <button onClick={() => updateMetric(goalsFilter, m.key, !metrics[goalsFilter]?.[m.key])} className={`w-5 h-5 rounded border flex items-center justify-center text-xs ${metrics[goalsFilter]?.[m.key] ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>
-                            {metrics[goalsFilter]?.[m.key] && '✓'}
-                          </button>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  );
+                })}
 
-              {[{ key: 'D', label: '📅 День' }, { key: 'W', label: '📆 Неделя' }, { key: 'M', label: '🗓 Месяц' }, { key: 'Q', label: '🎯 Квартал' }, { key: 'other', label: '📌' }].map(p => {
-                const filteredGoals = goalsByPeriod[p.key].filter(g => !goalsFilter || g.project === goalsFilter);
-                return filteredGoals.length > 0 && (
-                <div key={p.key}>
-                  <div className="text-xs text-gray-500 mb-0.5">{p.label}</div>
-                  <div className="space-y-0.5">
-                    {filteredGoals.map(g => (
-                      <div key={g.id} className={`flex items-center gap-1 p-1.5 rounded ${g.done ? 'bg-green-900/20' : 'bg-gray-800'}`}>
-                        <button onClick={() => toggleGoal(g.id)} className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${g.done ? 'bg-green-600 border-green-600' : 'border-gray-600'}`}>{g.done && '✓'}</button>
-                        <div className={`flex-1 text-sm truncate ${g.done ? 'line-through text-gray-500' : ''}`}>{g.text}</div>
-                        {g.project && <span style={{ backgroundColor: PROJECTS[g.project]?.color, fontSize: '10px' }} className="px-1 rounded">{PROJECTS[g.project]?.emoji}</span>}
-                        <button onClick={() => deleteGoal(g.id)} className="text-gray-600 hover:text-red-400 text-xs">✕</button>
-                      </div>
-                    ))}
+                {/* Пустое состояние */}
+                {goals.length === 0 && (
+                  <div className="bg-gray-800 rounded-xl p-6 text-center">
+                    <div className="text-4xl mb-3">🎯</div>
+                    <div className="text-gray-400 mb-1">Нет целей</div>
+                    <div className="text-sm text-gray-600">Добавь первую цель выше</div>
                   </div>
-                </div>
-              )})}
+                )}
+              </div>
             </div>
-          )}
+          );})()}
 
           {/* BRAIN DUMP TAB */}
-          {tab === 'dump' && (
-            <div className="flex-1 overflow-auto p-2 space-y-2 safe-bottom">
-              <div className="bg-gray-800 rounded-lg p-2 space-y-1">
-                <div className="flex gap-1">
-                  <input type="text" value={newDumpText} onChange={(e) => setNewDumpText(e.target.value)} placeholder="Мысль, идея, задача..." className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onKeyDown={(e) => e.key === 'Enter' && addDump()} />
-                  <button onClick={addDump} className="px-3 py-1 bg-orange-600 rounded font-bold">+</button>
+          {tab === 'dump' && (() => {
+            const filteredDump = brainDump.filter(item => {
+              if (!dumpFilter) return true;
+              if (dumpFilter === 'none') return !item.project;
+              return item.project === dumpFilter;
+            });
+            const dumpByProject = {};
+            brainDump.forEach(item => {
+              const p = item.project || 'none';
+              if (!dumpByProject[p]) dumpByProject[p] = [];
+              dumpByProject[p].push(item);
+            });
+
+            return (
+            <div className="flex-1 overflow-auto safe-bottom">
+              {/* Заголовок */}
+              <div className="bg-gray-800 border-b border-gray-700 px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-lg font-bold">🧠 Brain Dump</div>
+                  <div className="text-sm text-gray-400">{brainDump.length} мыслей</div>
                 </div>
-                <select value={newDumpProject} onChange={(e) => setNewDumpProject(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs">
-                  <option value="">Без проекта</option>
-                  {Object.entries(PROJECTS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
-                </select>
+                <div className="text-xs text-gray-500 mt-1">Выгрузи всё из головы, разберёшь потом</div>
               </div>
 
-              {/* Фильтры по проектам */}
-              <div className="flex gap-1 flex-wrap">
-                <button onClick={() => setDumpFilter('')} className={`px-2 py-0.5 rounded text-xs ${dumpFilter === '' ? 'bg-orange-600' : 'bg-gray-700'}`}>Все</button>
-                {Object.entries(PROJECTS).map(([k, v]) => (
-                  <button key={k} onClick={() => setDumpFilter(k)} className={`px-2 py-0.5 rounded text-xs ${dumpFilter === k ? 'bg-orange-600' : 'bg-gray-700'}`} style={{ borderLeft: `3px solid ${v.color}` }}>
-                    {v.emoji}
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-0.5">
-                {brainDump.filter(item => !dumpFilter || item.project === dumpFilter).map(item => (
-                  <div key={item.id} className="flex items-center gap-1 p-1.5 bg-gray-800 rounded group">
-                    {item.project && <span style={{ backgroundColor: PROJECTS[item.project]?.color, fontSize: '10px' }} className="px-1 rounded shrink-0">{PROJECTS[item.project]?.emoji}</span>}
-                    <div className="flex-1 text-sm truncate">{item.text}</div>
-                    <button onClick={() => convertToGoal(item)} className="text-xs text-blue-400 opacity-60 hover:opacity-100">→🎯</button>
-                    <button onClick={() => deleteDump(item.id)} className="text-xs text-gray-500 opacity-60 hover:opacity-100">✕</button>
+              <div className="p-3 space-y-3">
+                {/* Быстрое добавление */}
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newDumpText}
+                      onChange={(e) => setNewDumpText(e.target.value)}
+                      placeholder="Что крутится в голове?"
+                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm"
+                      onKeyDown={(e) => e.key === 'Enter' && addDump()}
+                    />
+                    <button onClick={addDump} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg font-bold transition-colors">+</button>
                   </div>
-                ))}
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setNewDumpProject('')}
+                      className={`px-2 py-1 rounded-lg text-xs transition-all ${newDumpProject === '' ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    >
+                      📥 Входящие
+                    </button>
+                    {Object.entries(PROJECTS).map(([k, v]) => (
+                      <button
+                        key={k}
+                        onClick={() => setNewDumpProject(k)}
+                        className={`px-2 py-1 rounded-lg text-xs transition-all`}
+                        style={{
+                          backgroundColor: newDumpProject === k ? v.color : `${v.color}33`,
+                          color: newDumpProject === k ? 'white' : v.color
+                        }}
+                      >
+                        {v.emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Фильтры */}
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setDumpFilter('')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${dumpFilter === '' ? 'bg-orange-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    >
+                      Все ({brainDump.length})
+                    </button>
+                    {Object.entries(PROJECTS).map(([k, v]) => {
+                      const count = dumpByProject[k]?.length || 0;
+                      return count > 0 && (
+                        <button
+                          key={k}
+                          onClick={() => setDumpFilter(k)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${dumpFilter === k ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
+                          style={{
+                            backgroundColor: dumpFilter === k ? v.color : `${v.color}33`,
+                            color: dumpFilter === k ? 'white' : v.color,
+                            '--tw-ring-color': v.color
+                          }}
+                        >
+                          {v.emoji} {count}
+                        </button>
+                      );
+                    })}
+                    {(dumpByProject['none']?.length || 0) > 0 && (
+                      <button
+                        onClick={() => setDumpFilter('none')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${dumpFilter === 'none' ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                      >
+                        📥 {dumpByProject['none']?.length || 0}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Список мыслей */}
+                {filteredDump.length > 0 ? (
+                  <div className="bg-gray-800 rounded-xl overflow-hidden">
+                    <div className="divide-y divide-gray-700/50">
+                      {filteredDump.map(item => (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-3 px-3 py-3 hover:bg-gray-700/30 transition-colors group"
+                        >
+                          {/* Индикатор проекта */}
+                          <div
+                            className="w-1 h-full min-h-[24px] rounded-full shrink-0"
+                            style={{ backgroundColor: item.project ? PROJECTS[item.project]?.color : '#6B7280' }}
+                          ></div>
+
+                          {/* Контент */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm">{item.text}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              {item.project && (
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: PROJECTS[item.project]?.color + '33', color: PROJECTS[item.project]?.color }}>
+                                  {PROJECTS[item.project]?.emoji} {PROJECTS[item.project]?.name}
+                                </span>
+                              )}
+                              {item.createdAt && (
+                                <span className="text-xs text-gray-600">
+                                  {new Date(item.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Действия */}
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button
+                              onClick={() => convertToGoal(item)}
+                              className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg text-xs transition-colors"
+                            >
+                              →🎯
+                            </button>
+                            <button
+                              onClick={() => deleteDump(item.id)}
+                              className="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-xs transition-colors"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-800 rounded-xl p-6 text-center">
+                    <div className="text-4xl mb-3">🧠</div>
+                    <div className="text-gray-400 mb-1">
+                      {dumpFilter ? 'Нет мыслей по этому проекту' : 'Голова чистая!'}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {dumpFilter ? 'Выбери другой фильтр или добавь мысль' : 'Запиши что крутится в голове'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Подсказка */}
+                <div className="bg-gray-800/50 rounded-xl p-3 text-center">
+                  <div className="text-sm text-gray-500 italic">
+                    "Прилетела мысль → сюда. Вернуться к тому что делал."
+                  </div>
+                </div>
               </div>
-              {brainDump.filter(item => !dumpFilter || item.project === dumpFilter).length === 0 && <div className="text-center text-gray-600 py-4 text-sm">{dumpFilter ? 'Нет мыслей по этому проекту' : 'Выгрузи всё из головы ↑'}</div>}
             </div>
-          )}
+          );})()}
 
           {/* Scenario Modal */}
           {showScenarioModal && (
-            <ScenarioModal 
-              dateKey={showScenarioModal.dateKey} 
+            <ScenarioModal
+              dateKey={showScenarioModal.dateKey}
               dayOfWeek={showScenarioModal.dayOfWeek}
-              onClose={() => setShowScenarioModal(null)} 
+              onClose={() => setShowScenarioModal(null)}
             />
           )}
 
