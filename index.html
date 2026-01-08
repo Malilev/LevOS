@@ -109,19 +109,28 @@
     };
 
     const SLOT_HEIGHT = 18;
+    // TIME_SLOTS: начинаем с 06:00, заканчиваем 06:00 следующего дня
+    // Порядок: 06:00 → 23:30 → 00:00 (полночь) → 06:00
     const TIME_SLOTS = [];
-    // Полный день: 00:00 - 23:30 + ночь после полуночи (24:00 - 28:00 = 00:00 - 04:00 следующего дня)
-    for (let i = 0; i < 24; i++) { TIME_SLOTS.push({ hour: i, label: `${i.toString().padStart(2, '0')}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true }); }
-    // После полуночи (для сна) - 24:00 до 28:00 = 00:00 до 04:00
-    TIME_SLOTS.push({ hour: 24, label: '00', isHalf: false, isMidnight: true });
-    TIME_SLOTS.push({ hour: 24.5, label: '', isHalf: true });
-    TIME_SLOTS.push({ hour: 25, label: '01', isHalf: false, isNight: true });
-    TIME_SLOTS.push({ hour: 25.5, label: '', isHalf: true });
-    TIME_SLOTS.push({ hour: 26, label: '02', isHalf: false, isNight: true });
-    TIME_SLOTS.push({ hour: 26.5, label: '', isHalf: true });
-    TIME_SLOTS.push({ hour: 27, label: '03', isHalf: false, isNight: true });
-    TIME_SLOTS.push({ hour: 27.5, label: '', isHalf: true });
-    TIME_SLOTS.push({ hour: 28, label: '04', isHalf: false, isNight: true });
+    // Дневные часы: 06:00 - 23:30
+    for (let i = 6; i < 24; i++) {
+      TIME_SLOTS.push({ hour: i, label: `${i.toString().padStart(2, '0')}`, isHalf: false });
+      TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true });
+    }
+    // Ночные часы после полуночи: 00:00 - 06:00 (hour 24-30 внутренне)
+    for (let i = 0; i <= 6; i++) {
+      const internalHour = 24 + i; // 24 = 00:00, 25 = 01:00, ..., 30 = 06:00
+      TIME_SLOTS.push({
+        hour: internalHour,
+        label: `${i.toString().padStart(2, '0')}`,
+        isHalf: false,
+        isMidnight: i === 0,
+        isNight: i > 0
+      });
+      if (i < 6) {
+        TIME_SLOTS.push({ hour: internalHour + 0.5, label: '', isHalf: true, isNight: true });
+      }
+    }
 
     const roundToHalfHour = (hour) => Math.round(hour * 2) / 2;
 
@@ -569,8 +578,7 @@
         }
       };
 
-      // Refs для синхронизации скролла
-      const timeLabelsRef = useRef(null);
+      // Refs
       const daysContainerRef = useRef(null);
 
       // Firebase real-time sync
@@ -660,20 +668,6 @@
       useEffect(() => { storage.set('metrics', metrics); }, [metrics]);
       useEffect(() => { storage.set('dayScenarios', dayScenarios); }, [dayScenarios]);
       useEffect(() => { storage.set('currentLocation', currentLocation); }, [currentLocation]);
-
-      // Синхронизация скролла между метками времени и календарём
-      useEffect(() => {
-        const timeLabels = timeLabelsRef.current;
-        const daysContainer = daysContainerRef.current;
-        if (!timeLabels || !daysContainer) return;
-
-        const syncScroll = (e) => {
-          timeLabels.scrollTop = e.target.scrollTop;
-        };
-
-        daysContainer.addEventListener('scroll', syncScroll);
-        return () => daysContainer.removeEventListener('scroll', syncScroll);
-      }, [tab]);
 
       const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
         const d = new Date(weekStart);
@@ -883,6 +877,26 @@
         setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
       }, [schedules, blocks, hasCollision, recalculateAutoBlocks]);
 
+      // Сдвиг блока на ±30 мин
+      const shiftBlock = useCallback((dateKey, blockId, deltaHours) => {
+        const schedule = schedules[dateKey] || [];
+        const block = schedule.find(b => b.id === blockId);
+        if (!block) return;
+        const newHour = block.startHour + deltaHours;
+        // Проверяем границы (6-30: от 06:00 до 06:00 следующего дня)
+        if (newHour < 6 || newHour > 30) return;
+        // Для ОП не позволяем после 21:00
+        if (block.blockId.startsWith('OP') && newHour >= 21) return;
+        const excludeIds = block.blockId.startsWith('OP') ? [blockId, ...schedule.filter(b => b.auto).map(b => b.id)] : [blockId];
+        if (hasCollision(schedule, newHour, block.duration, excludeIds)) return;
+        let newSchedule = schedule.map(b => b.id === blockId ? { ...b, startHour: newHour } : b);
+        if (block.blockId.startsWith('OP')) {
+          newSchedule = newSchedule.filter(b => !b.auto);
+          newSchedule = [...newSchedule, ...generateAutoBlocks(newHour, block.duration)];
+        }
+        setSchedules(prev => ({ ...prev, [dateKey]: newSchedule }));
+      }, [schedules, hasCollision, generateAutoBlocks]);
+
       const removeBlock = useCallback((dateKey, blockId) => {
         const schedule = schedules[dateKey] || [];
         const block = schedule.find(b => b.id === blockId);
@@ -970,22 +984,25 @@
         const dayScenario = getScenarioForDate(dateKey);
         const scenarioInfo = SCENARIOS[dayScenario];
 
-        // Находим сон из предыдущего дня, который переливается в текущий
+        // Находим сон из предыдущего дня, который переливается в текущий (после 06:00)
         const overflowSleep = useMemo(() => {
           if (!prevSchedule) return null;
           const sleepBlock = prevSchedule.find(b => b.blockId === 'SLEEP');
           if (!sleepBlock) return null;
 
+          // Сон начинается после полуночи (hour >= 24)
           if (sleepBlock.startHour >= 24) {
             const sleepDurationHours = sleepBlock.duration / 60;
-            const endHour = sleepBlock.startHour - 24 + sleepDurationHours;
-            const displayDuration = Math.min(endHour, 12) * 60;
+            // Время окончания сна в "часах следующего дня" (0 = полночь, 6 = 06:00, etc)
+            const endHourNextDay = sleepBlock.startHour - 24 + sleepDurationHours;
 
-            if (displayDuration > 0) {
+            // Если сон заканчивается после 06:00 следующего дня - показываем overflow
+            if (endHourNextDay > 6) {
+              const overflowDuration = (endHourNextDay - 6) * 60; // минуты после 06:00
               return {
                 ...sleepBlock,
-                startHour: 0,
-                duration: displayDuration,
+                startHour: 6, // Начинаем с 06:00 (верх календаря)
+                duration: Math.min(overflowDuration, 6 * 60), // Максимум до 12:00
                 isOverflow: true,
                 totalDuration: sleepBlock.duration
               };
@@ -995,10 +1012,11 @@
         }, [prevSchedule]);
 
         return (
-          <div className="flex-1 min-w-0 border-r border-gray-800 last:border-r-0 flex flex-col">
-            {/* Header */}
+          <div className="flex-1 min-w-0 border-r border-gray-800 last:border-r-0">
+            {/* Header - sticky */}
             <div
-              className={`sticky top-0 z-10 p-0.5 text-center border-b border-gray-700 cursor-pointer ${isToday ? 'bg-orange-900/50' : 'bg-gray-800'}`}
+              className={`sticky top-0 z-10 p-0.5 text-center border-b border-gray-700 cursor-pointer ${isToday ? 'bg-orange-900' : 'bg-gray-800'}`}
+              style={{ height: '52px' }}
               onClick={() => setShowScenarioModal({ dateKey, dayOfWeek })}
             >
               <div className="flex items-center justify-center gap-1">
@@ -1017,19 +1035,23 @@
             </div>
 
             {/* Slots */}
-            <div className="relative flex-1" style={{ minHeight: TIME_SLOTS.length * SLOT_HEIGHT }}>
+            <div className="relative" style={{ height: TIME_SLOTS.length * SLOT_HEIGHT }}>
+              {/* Фон для ночных часов (после полуночи) - pointer-events-none чтобы не блокировать клики */}
+              {/* Полночь начинается с индекса 36 (после 18 часов × 2 слота) */}
+              <div className="absolute left-0 right-0 bg-indigo-950/40 pointer-events-none" style={{ top: 36 * SLOT_HEIGHT, height: 13 * SLOT_HEIGHT }}></div>
+
               {TIME_SLOTS.map((slot, idx) => (
                 <div key={slot.hour}>
-                  {/* Разделитель полночь */}
+                  {/* Разделитель полуночь */}
                   {slot.hour === 24 && !slot.isHalf && (
-                    <div className="absolute left-0 right-0 bg-indigo-600/50 text-center" style={{ top: idx * SLOT_HEIGHT - 1, height: 2 }}></div>
+                    <div className="absolute left-0 right-0 bg-indigo-500 z-5" style={{ top: idx * SLOT_HEIGHT, height: 2 }}></div>
                   )}
                   <div
                     onClick={() => {
                       if (movingBlock) moveBlock(dateKey, slot.hour);
                       else if (selectedBlock) placeBlock(dateKey, slot.hour);
                     }}
-                    className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.isMidnight ? 'bg-indigo-900/40' : slot.isNight ? 'bg-indigo-950/60' : slot.hour < 7 ? 'bg-gray-900/30' : ''}`}
+                    className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-800/30' : 'border-gray-700/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''}`}
                     style={{ top: idx * SLOT_HEIGHT, height: SLOT_HEIGHT }}
                   />
                 </div>
@@ -1067,9 +1089,20 @@
                 const startIdx = TIME_SLOTS.findIndex(s => s.hour === item.startHour);
                 if (startIdx === -1) return null;
                 const top = startIdx * SLOT_HEIGHT;
-                const height = (item.duration / 30) * SLOT_HEIGHT - 1;
-                const isMoving = movingBlock?.id === item.id;
+
+                // Для блока сна: обрезаем на hour 30 (06:00 следующего дня)
                 const isSleep = item.blockId === 'SLEEP';
+                let displayDuration = item.duration;
+                if (isSleep && item.startHour >= 24) {
+                  const endHour = item.startHour + item.duration / 60;
+                  if (endHour > 30) {
+                    // Обрезаем до 30 (06:00)
+                    displayDuration = (30 - item.startHour) * 60;
+                  }
+                }
+
+                const height = (displayDuration / 30) * SLOT_HEIGHT - 1;
+                const isMoving = movingBlock?.id === item.id;
                 const sleepHours = isSleep ? Math.round(item.duration / 60 * 10) / 10 : 0;
 
                 return (
@@ -1088,6 +1121,10 @@
                         <div className="flex items-center justify-between mt-auto">
                           <span className="opacity-70">{item.duration}м</span>
                           <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                            {/* Сдвиг времени ±30 мин */}
+                            <button onClick={() => shiftBlock(dateKey, item.id, -0.5)} className="w-3.5 h-3.5 bg-blue-500/40 rounded text-xs">↑</button>
+                            <button onClick={() => shiftBlock(dateKey, item.id, 0.5)} className="w-3.5 h-3.5 bg-blue-500/40 rounded text-xs">↓</button>
+                            {/* Размер */}
                             <button onClick={() => resizeBlock(dateKey, item.id, -30)} disabled={item.duration <= def.minDur} className="w-3.5 h-3.5 bg-white/20 rounded disabled:opacity-30">−</button>
                             <button onClick={() => resizeBlock(dateKey, item.id, 30)} disabled={item.duration >= def.maxDur} className="w-3.5 h-3.5 bg-white/20 rounded disabled:opacity-30">+</button>
                             <button onClick={() => removeBlock(dateKey, item.id)} className="w-3.5 h-3.5 bg-red-500/40 rounded">×</button>
@@ -2006,31 +2043,36 @@
                 </div>
               )}
 
-              {/* Week view */}
-              <div className="flex-1 flex overflow-hidden">
-                {/* Time labels - синхронизированы с календарём */}
-                <div ref={timeLabelsRef} className="w-5 shrink-0 bg-gray-900 overflow-hidden no-scrollbar" style={{ paddingTop: '52px' }}>
-                  {TIME_SLOTS.map((slot) => (
-                    <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${
-                      slot.isMidnight ? 'text-indigo-400 font-bold' :
-                      slot.isNight ? 'text-indigo-400' :
-                      slot.hour < 7 ? 'text-gray-600' :
-                      slot.isHalf ? 'text-gray-800' : 'text-gray-500'
-                    }`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
-                      {!slot.isHalf && slot.label}
-                    </div>
-                  ))}
-                </div>
+              {/* Week view - единый скроллируемый контейнер */}
+              <div ref={daysContainerRef} className="flex-1 overflow-auto timeline-scroll">
+                <div className="flex min-w-max">
+                  {/* Time labels - sticky слева */}
+                  <div className="w-5 shrink-0 bg-gray-900 sticky left-0 z-20">
+                    {/* Заголовок-заглушка */}
+                    <div className="h-[52px] bg-gray-900 sticky top-0 z-30"></div>
+                    {/* Слоты времени */}
+                    {TIME_SLOTS.map((slot) => (
+                      <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${
+                        slot.isMidnight ? 'text-indigo-400 font-bold bg-indigo-950' :
+                        slot.isNight ? 'text-indigo-400 bg-indigo-950/50' :
+                        slot.hour < 7 ? 'text-gray-600 bg-gray-900' :
+                        slot.isHalf ? 'text-gray-800 bg-gray-900' : 'text-gray-500 bg-gray-900'
+                      }`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
+                        {!slot.isHalf && slot.label}
+                      </div>
+                    ))}
+                  </div>
 
-                {/* Days */}
-                <div ref={daysContainerRef} className="flex-1 flex overflow-x-auto overflow-y-auto timeline-scroll">
-                  {weekDays.map((day, idx) => {
-                    const dk = formatDate(day);
-                    const prevDay = new Date(day);
-                    prevDay.setDate(prevDay.getDate() - 1);
-                    const prevDk = formatDate(prevDay);
-                    return <DayColumn key={dk} date={day} dateKey={dk} schedule={schedules[dk] || []} prevSchedule={schedules[prevDk] || []} />;
-                  })}
+                  {/* Days */}
+                  <div className="flex flex-1">
+                    {weekDays.map((day, idx) => {
+                      const dk = formatDate(day);
+                      const prevDay = new Date(day);
+                      prevDay.setDate(prevDay.getDate() - 1);
+                      const prevDk = formatDate(prevDay);
+                      return <DayColumn key={dk} date={day} dateKey={dk} schedule={schedules[dk] || []} prevSchedule={schedules[prevDk] || []} />;
+                    })}
+                  </div>
                 </div>
               </div>
 
