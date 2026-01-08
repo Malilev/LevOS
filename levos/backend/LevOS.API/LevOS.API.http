@@ -1,0 +1,6 @@
+@LevOS.API_HostAddress = http://localhost:5156
+
+GET {{LevOS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

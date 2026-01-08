@@ -1,0 +1,45 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://backend:5000
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend/LevOS.API
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+
+  # Development mode with hot reload
+  frontend-dev:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
+  backend-dev:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/LevOS.API:/app
+    command: dotnet watch run --urls http://+:5000
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
