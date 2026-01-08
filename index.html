@@ -40,10 +40,18 @@
 
     const SLOT_HEIGHT = 18;
     const TIME_SLOTS = [];
-    // Полный день: 00:00 - 23:30 + полночь (00:00 следующего дня)
+    // Полный день: 00:00 - 23:30 + ночь после полуночи (24:00 - 28:00 = 00:00 - 04:00 следующего дня)
     for (let i = 0; i < 24; i++) { TIME_SLOTS.push({ hour: i, label: `${i.toString().padStart(2, '0')}`, isHalf: false }); TIME_SLOTS.push({ hour: i + 0.5, label: '', isHalf: true }); }
-    // Полночь (конец дня) - без метки, просто визуальный маркер
-    TIME_SLOTS.push({ hour: 24, label: '', isHalf: false, isMidnight: true });
+    // После полуночи (для сна) - 24:00 до 28:00 = 00:00 до 04:00
+    TIME_SLOTS.push({ hour: 24, label: '00', isHalf: false, isMidnight: true });
+    TIME_SLOTS.push({ hour: 24.5, label: '', isHalf: true });
+    TIME_SLOTS.push({ hour: 25, label: '01', isHalf: false, isNight: true });
+    TIME_SLOTS.push({ hour: 25.5, label: '', isHalf: true });
+    TIME_SLOTS.push({ hour: 26, label: '02', isHalf: false, isNight: true });
+    TIME_SLOTS.push({ hour: 26.5, label: '', isHalf: true });
+    TIME_SLOTS.push({ hour: 27, label: '03', isHalf: false, isNight: true });
+    TIME_SLOTS.push({ hour: 27.5, label: '', isHalf: true });
+    TIME_SLOTS.push({ hour: 28, label: '04', isHalf: false, isNight: true });
 
     const roundToHalfHour = (hour) => Math.round(hour * 2) / 2;
 
@@ -111,6 +119,148 @@
       LAB: { name: 'Лаб', color: '#8B5CF6', emoji: '🔬' },
       FAMILY: { name: 'Семья', color: '#A855F7', emoji: '👨‍👩‍👧' },
       PERSONAL: { name: 'Личное', color: '#EAB308', emoji: '🎯' },
+    };
+
+    // Контексты локаций — где ты и что можно делать
+    const LOCATION_CONTEXTS = {
+      OFFICE: {
+        id: 'OFFICE',
+        name: 'Офис',
+        emoji: '🏢',
+        color: '#3B82F6',
+        time: '2-4ч',
+        interrupt: 'Низкая',
+        energy: 'Высокая',
+        tools: 'Всё',
+        works: '🔥 Глубокая работа, гиперфокус',
+        bundle: 'Любимый кофе + глубокая работа',
+        tasks: {
+          POLECHAT: 'Документы, код, стратегия',
+          SOMALAB: 'Глубокие задачи',
+          LAB: 'Писать, анализ',
+        }
+      },
+      HOME_NIGHT: {
+        id: 'HOME_NIGHT',
+        name: 'Дом ночью',
+        emoji: '🌙',
+        color: '#6366F1',
+        time: '2-4ч',
+        interrupt: 'Низкая',
+        energy: 'Средняя (усталость)',
+        tools: 'Всё',
+        works: '🔥 Гиперфокус, но риск для сна',
+        bundle: 'Тишина + ambient в наушниках + гиперфокус',
+        tasks: {
+          POLECHAT: 'Код, думать',
+          LAB: 'Писать',
+        }
+      },
+      ALMAZOVA: {
+        id: 'ALMAZOVA',
+        name: 'Алмазова (ожидание)',
+        emoji: '🏥',
+        color: '#EF4444',
+        time: '30-120мин',
+        interrupt: 'Высокая (вызовут)',
+        energy: 'Средняя',
+        tools: 'Телефон, ноутбук',
+        works: '⚡ Реактив: ответы, мелочи, чтение',
+        bundle: 'Чай из автомата + разгрести inbox',
+        tasks: {
+          POLECHAT: 'Ответить в чат',
+          SOMALAB: 'Ответы',
+          LAB: 'Читать статьи',
+        },
+        warning: 'Никаких амбиций! Только inbox zero и мелочи'
+      },
+      HOME_DAY: {
+        id: 'HOME_DAY',
+        name: 'Дом днём',
+        emoji: '🏠',
+        color: '#A855F7',
+        time: 'Фрагменты',
+        interrupt: 'Очень высокая',
+        energy: 'Низкая',
+        tools: 'Всё, но бесполезно',
+        works: '👨‍👩‍👧 Семья. Не работа.',
+        bundle: 'Время с Май',
+        tasks: {},
+        warning: 'Не пытаться работать — это ловушка!'
+      },
+      ROAD_ALM: {
+        id: 'ROAD_ALM',
+        name: 'Путь до Алмазова',
+        emoji: '🚶',
+        color: '#4B5563',
+        time: '25 мин',
+        interrupt: 'Нулевая',
+        energy: 'Свежая',
+        tools: 'Телефон, наушники',
+        works: '🎧 Аудио, звонки, голосовые, обдумать',
+        bundle: 'Любимый подкаст + обдумать одну задачу',
+        tasks: {
+          POLECHAT: 'Позвонить партнёру',
+          SOMALAB: 'Звонок команде',
+          LAB: 'Аудио лекции',
+        }
+      },
+      ROAD_GYM: {
+        id: 'ROAD_GYM',
+        name: 'Путь до зала',
+        emoji: '🏋️',
+        color: '#22C55E',
+        time: '15-20 мин',
+        interrupt: 'Нулевая',
+        energy: 'Свежая',
+        tools: 'Телефон, наушники',
+        works: '🎧 Аудио, звонки, голосовые',
+        bundle: 'Энергичная музыка / подкаст',
+        tasks: {}
+      },
+      WALK: {
+        id: 'WALK',
+        name: 'Прогулка с Май',
+        emoji: '🚶‍♂️',
+        color: '#9333EA',
+        time: '1-2ч',
+        interrupt: 'Низкая',
+        energy: 'Средняя',
+        tools: 'Голос, наушники',
+        works: '🎧 Подкасты, обдумывание, диктовка',
+        bundle: 'Свежий воздух + надиктовать мысли',
+        tasks: {
+          POLECHAT: 'Обдумать проблему',
+          LAB: 'Обдумать структуру',
+        }
+      },
+      CAFE: {
+        id: 'CAFE',
+        name: 'Кафе (встреча)',
+        emoji: '☕',
+        color: '#F59E0B',
+        time: 'Фиксированное',
+        interrupt: 'Нулевая',
+        energy: 'Высокая',
+        tools: 'Разговор',
+        works: '🤝 Только встречи',
+        bundle: 'Хороший кофе + продуктивный разговор',
+        tasks: {}
+      },
+      OPERATING: {
+        id: 'OPERATING',
+        name: 'Операционная',
+        emoji: '⚕️',
+        color: '#DC2626',
+        time: '3-8ч',
+        interrupt: 'Нулевая',
+        energy: '100% туда',
+        tools: 'Ничего',
+        works: '🏥 Хирургия. Точка.',
+        bundle: '',
+        tasks: {},
+        warning: '100% фокус на операции'
+      },
     };
 
     // Полные триггеры с описаниями и зависимостями
@@ -302,6 +452,10 @@
       const [dumpFilter, setDumpFilter] = useState('');
       const [goalsFilter, setGoalsFilter] = useState('');
       const [dayScenarios, setDayScenarios] = useState(() => storage.get('dayScenarios', {}));
+      const [currentLocation, setCurrentLocation] = useState(() => storage.get('currentLocation', null));
+      const [showLocationPicker, setShowLocationPicker] = useState(false);
+      const [almCalc, setAlmCalc] = useState({ arrivedAt: '', myOp: '', currentOp: '' });
+      const [showAlmCalc, setShowAlmCalc] = useState(false);
 
       // Refs для синхронизации скролла
       const timeLabelsRef = useRef(null);
@@ -316,6 +470,7 @@
       useEffect(() => { storage.set('weekFocus', weekFocus); }, [weekFocus]);
       useEffect(() => { storage.set('metrics', metrics); }, [metrics]);
       useEffect(() => { storage.set('dayScenarios', dayScenarios); }, [dayScenarios]);
+      useEffect(() => { storage.set('currentLocation', currentLocation); }, [currentLocation]);
 
       // Синхронизация скролла между метками времени и календарём
       useEffect(() => {
@@ -685,7 +840,7 @@
                       if (movingBlock) moveBlock(dateKey, slot.hour);
                       else if (selectedBlock) placeBlock(dateKey, slot.hour);
                     }}
-                    className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.isMidnight ? 'bg-indigo-900/40' : slot.hour < 7 ? 'bg-gray-900/30' : ''}`}
+                    className={`absolute left-0 right-0 border-b ${slot.isHalf ? 'border-gray-900/50' : 'border-gray-800/50'} ${(selectedBlock || movingBlock) ? 'hover:bg-green-900/30 cursor-pointer' : ''} ${slot.isMidnight ? 'bg-indigo-900/40' : slot.isNight ? 'bg-indigo-950/60' : slot.hour < 7 ? 'bg-gray-900/30' : ''}`}
                     style={{ top: idx * SLOT_HEIGHT, height: SLOT_HEIGHT }}
                   />
                 </div>
@@ -920,42 +1075,41 @@
             // Создаём события таймлайна
             const timelineEvents = [];
 
-            // Подъём
+            // Вспомогательная функция для форматирования времени
+            const formatHour = (h) => {
+              const normalized = h >= 24 ? h - 24 : h;
+              return `${Math.floor(normalized)}:${String(Math.round((normalized % 1) * 60)).padStart(2, '0')}`;
+            };
+
+            // Подъём (виртуальное событие)
             if (sleepBlock || scenarioInfo?.wakeUp) {
               timelineEvents.push({
                 time: wakeUpTime,
                 emoji: '😴',
                 title: 'Подъём',
                 subtitle: 'зубы → витамины',
-                color: '#6366F1'
+                color: '#6366F1',
+                isVirtual: true
               });
             }
 
-            // Домашнее окно
+            // Домашнее окно (виртуальное событие)
             if (homeWindow && homeWindow.duration > 30) {
               const hours = Math.floor(homeWindow.duration / 60);
               const mins = homeWindow.duration % 60;
               timelineEvents.push({
-                time: `${Math.floor(homeWindow.start + 0.5)}:${String(Math.round(((homeWindow.start + 0.5) % 1) * 60)).padStart(2, '0')}`,
+                time: formatHour(homeWindow.start + 0.5),
                 emoji: '🔥',
                 title: `ОКНО ${hours > 0 ? hours + 'ч' : ''}${mins > 0 ? ' ' + mins + 'м' : ''}`,
                 subtitle: CONTEXTS[dashContext]?.name || 'работа',
                 color: '#F59E0B',
-                highlight: true
+                highlight: true,
+                isVirtual: true
               });
             }
 
-            // Спорт (если доступен)
-            if (sportBlock) {
-              timelineEvents.push({
-                time: `${Math.floor(sportBlock.startHour)}:${String(Math.round((sportBlock.startHour % 1) * 60)).padStart(2, '0')}`,
-                emoji: '🏋️',
-                title: blocks[sportBlock.blockId]?.name || 'Спорт',
-                subtitle: 'вход до 17:00!',
-                color: '#22C55E',
-                highlight: true
-              });
-            } else if (dayScenario === '4') {
+            // Виртуальное событие: можно зал (если сценарий 4+ и нет спорта в календаре)
+            if (dayScenario === '4' && !sportBlock) {
               timelineEvents.push({
                 time: '~15:00',
                 emoji: '🏋️',
@@ -963,72 +1117,82 @@
                 subtitle: 'вход до 17:00!',
                 color: '#22C55E',
                 highlight: true,
-                optional: true
+                optional: true,
+                isVirtual: true
               });
             }
 
-            // Дорога
-            const roadToOp = dashSchedule.find(b => b.blockId === 'ROAD' && opBlock && b.startHour < opBlock.startHour && b.startHour > (homeWindow?.start || 0));
-            if (roadToOp) {
-              timelineEvents.push({
-                time: `${Math.floor(roadToOp.startHour)}:${String(Math.round((roadToOp.startHour % 1) * 60)).padStart(2, '0')}`,
-                emoji: '🚶',
-                title: 'Дорога',
-                subtitle: '',
-                color: '#4B5563'
-              });
-            }
+            // ВСЕ блоки из календаря (кроме SLEEP - обрабатывается отдельно)
+            dashSchedule.filter(b => b.blockId !== 'SLEEP').forEach(b => {
+              const blockDef = blocks[b.blockId];
+              const startTime = formatHour(b.startHour);
 
-            // Операции
-            if (opBlock) {
-              timelineEvents.push({
-                time: `${Math.floor(opBlock.startHour)}:${String(Math.round((opBlock.startHour % 1) * 60)).padStart(2, '0')}`,
-                emoji: '🏥',
-                title: 'Операции',
-                subtitle: blocks[opBlock.blockId]?.name || '',
-                color: '#EF4444'
-              });
-
-              const opEnd = opBlock.startHour + opBlock.duration / 60;
-              timelineEvents.push({
-                time: `~${Math.floor(opEnd)}:${String(Math.round((opEnd % 1) * 60)).padStart(2, '0')}`,
-                emoji: '✅',
-                title: 'Конец ОП',
-                subtitle: '',
-                color: '#22C55E'
-              });
-            }
-
-            // 50 мин Май
-            if (famBlock) {
-              timelineEvents.push({
-                time: `${Math.floor(famBlock.startHour)}:${String(Math.round((famBlock.startHour % 1) * 60)).padStart(2, '0')}`,
-                emoji: '👨‍👩‍👧',
-                title: '50 мин Май',
-                subtitle: '',
-                color: '#A855F7'
-              });
-            }
-
-            // Вечерняя работа
-            workBlocks.filter(b => b.startHour >= 19).forEach(b => {
-              timelineEvents.push({
-                time: `${Math.floor(b.startHour)}:${String(Math.round((b.startHour % 1) * 60)).padStart(2, '0')}`,
-                emoji: b.blockId === 'HYPER' ? '🔥' : PROJECTS[b.blockId]?.emoji || '💼',
-                title: b.blockId === 'HYPER' ? 'Гиперфокус' : 'Окно совы',
-                subtitle: PROJECTS[b.blockId]?.name || 'работа',
-                color: blocks[b.blockId]?.color || '#F59E0B'
-              });
+              // Специальное оформление для операций
+              if (b.blockId && b.blockId.startsWith('OP')) {
+                timelineEvents.push({
+                  time: startTime,
+                  emoji: '🏥',
+                  title: 'Операции',
+                  subtitle: blockDef?.name || b.blockId,
+                  color: '#EF4444',
+                  fromCalendar: true
+                });
+                // Добавляем конец ОП
+                const opEnd = b.startHour + b.duration / 60;
+                timelineEvents.push({
+                  time: `~${formatHour(opEnd)}`,
+                  emoji: '✅',
+                  title: 'Конец ОП',
+                  subtitle: '',
+                  color: '#22C55E',
+                  isVirtual: true
+                });
+              }
+              // Спорт с пометкой
+              else if (b.blockId === 'SPORT' || b.blockId === 'SPORT_SPA') {
+                timelineEvents.push({
+                  time: startTime,
+                  emoji: blockDef?.emoji || '🏋️',
+                  title: blockDef?.name || 'Спорт',
+                  subtitle: 'вход до 17:00!',
+                  color: blockDef?.color || '#22C55E',
+                  highlight: true,
+                  fromCalendar: true
+                });
+              }
+              // Рабочие блоки
+              else if (['POLECHAT', 'LAB', 'SOMALAB', 'HYPER'].includes(b.blockId)) {
+                timelineEvents.push({
+                  time: startTime,
+                  emoji: blockDef?.emoji || '💼',
+                  title: b.startHour >= 19 ? (b.blockId === 'HYPER' ? 'Гиперфокус' : 'Окно совы') : (blockDef?.name || b.blockId),
+                  subtitle: b.startHour >= 19 ? (PROJECTS[b.blockId]?.name || '') : '',
+                  color: blockDef?.color || '#F59E0B',
+                  fromCalendar: true
+                });
+              }
+              // Все остальные блоки из календаря
+              else {
+                timelineEvents.push({
+                  time: startTime,
+                  emoji: blockDef?.emoji || '📌',
+                  title: blockDef?.name || b.blockId,
+                  subtitle: '',
+                  color: blockDef?.color || '#6B7280',
+                  fromCalendar: true
+                });
+              }
             });
 
-            // Сон
+            // Записка перед сном (виртуальное событие)
             if (sleepBlock) {
               timelineEvents.push({
                 time: sleepStartTime,
                 emoji: '📝',
                 title: 'Записка',
                 subtitle: '→ зубы → сон',
-                color: '#6366F1'
+                color: '#6366F1',
+                isVirtual: true
               });
             }
 
@@ -1246,6 +1410,326 @@
                     </div>
                   )}
 
+                  {/* Контекст — где ты сейчас */}
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <div className="text-sm font-bold mb-2 text-gray-400">📍 Где ты сейчас?</div>
+
+                    {!showLocationPicker ? (
+                      <button
+                        onClick={() => setShowLocationPicker(true)}
+                        className="w-full p-3 rounded-lg border-2 border-dashed border-gray-600 hover:border-gray-500 transition-colors"
+                      >
+                        {currentLocation ? (
+                          <div className="flex items-center gap-3">
+                            <div className="text-2xl">{LOCATION_CONTEXTS[currentLocation]?.emoji}</div>
+                            <div className="text-left flex-1">
+                              <div className="font-medium">{LOCATION_CONTEXTS[currentLocation]?.name}</div>
+                              <div className="text-xs text-gray-400">{LOCATION_CONTEXTS[currentLocation]?.works}</div>
+                            </div>
+                            <div className="text-gray-500">✏️</div>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500">Нажми, чтобы выбрать</div>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          {Object.values(LOCATION_CONTEXTS).map(loc => (
+                            <button
+                              key={loc.id}
+                              onClick={() => { setCurrentLocation(loc.id); setShowLocationPicker(false); }}
+                              className={`p-2 rounded-lg text-center transition-all ${currentLocation === loc.id ? 'ring-2 ring-orange-500' : 'hover:bg-gray-700'}`}
+                              style={{ backgroundColor: loc.color + '22' }}
+                            >
+                              <div className="text-xl">{loc.emoji}</div>
+                              <div className="text-xs truncate">{loc.name.split(' ')[0]}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setShowLocationPicker(false)}
+                          className="w-full py-1 text-sm text-gray-500"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Детали выбранного контекста */}
+                    {currentLocation && !showLocationPicker && (() => {
+                      const loc = LOCATION_CONTEXTS[currentLocation];
+                      const projectTasks = Object.entries(loc.tasks || {});
+                      return (
+                        <div className="mt-3 space-y-2">
+                          {/* Предупреждение */}
+                          {loc.warning && (
+                            <div className="bg-red-900/30 border border-red-800 rounded-lg p-2 text-sm text-red-300">
+                              ⚠️ {loc.warning}
+                            </div>
+                          )}
+
+                          {/* Характеристики */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-gray-900 rounded p-2">
+                              <span className="text-gray-500">Время:</span> {loc.time}
+                            </div>
+                            <div className="bg-gray-900 rounded p-2">
+                              <span className="text-gray-500">Прерывания:</span> {loc.interrupt}
+                            </div>
+                            <div className="bg-gray-900 rounded p-2">
+                              <span className="text-gray-500">Энергия:</span> {loc.energy}
+                            </div>
+                            <div className="bg-gray-900 rounded p-2">
+                              <span className="text-gray-500">Инструменты:</span> {loc.tools}
+                            </div>
+                          </div>
+
+                          {/* Что работает */}
+                          <div className="bg-gray-900 rounded-lg p-2">
+                            <div className="text-xs text-gray-500 mb-1">Что работает:</div>
+                            <div className="text-sm">{loc.works}</div>
+                          </div>
+
+                          {/* Temptation bundle */}
+                          {loc.bundle && (
+                            <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-2">
+                              <div className="text-xs text-yellow-500 mb-1">🎁 Связка:</div>
+                              <div className="text-sm text-yellow-200">{loc.bundle}</div>
+                            </div>
+                          )}
+
+                          {/* Задачи по проектам */}
+                          {projectTasks.length > 0 && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-gray-500">По проектам:</div>
+                              {projectTasks.map(([proj, task]) => (
+                                <div key={proj} className="flex items-center gap-2 bg-gray-900 rounded p-2">
+                                  <span style={{ color: PROJECTS[proj]?.color }}>{PROJECTS[proj]?.emoji}</span>
+                                  <span className="text-xs text-gray-400">{PROJECTS[proj]?.name}:</span>
+                                  <span className="text-sm flex-1">{task}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Калькулятор Алмазова */}
+                  <div className="bg-gray-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setShowAlmCalc(!showAlmCalc)}
+                      className="w-full p-3 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">🏥</span>
+                        <span className="font-medium">Калькулятор ожидания</span>
+                      </div>
+                      <span className="text-gray-500 text-xs">{showAlmCalc ? '▼ свернуть' : '▶ развернуть'}</span>
+                    </button>
+
+                    {showAlmCalc && (
+                      <div className="px-3 pb-3 space-y-3">
+                        {/* Быстрый ввод номеров */}
+                        <div className="bg-gray-900 rounded-lg p-3">
+                          <div className="flex items-center gap-4 justify-center">
+                            <div className="text-center">
+                              <div className="text-xs text-gray-500 mb-1">Сейчас идёт</div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setAlmCalc({...almCalc, currentOp: Math.max(1, (parseInt(almCalc.currentOp) || 1) - 1).toString()})}
+                                  className="w-8 h-8 bg-gray-800 rounded-lg hover:bg-gray-700"
+                                >−</button>
+                                <div className="w-12 h-12 bg-red-900/50 border-2 border-red-600 rounded-xl flex items-center justify-center text-2xl font-bold text-red-300">
+                                  {almCalc.currentOp || '?'}
+                                </div>
+                                <button
+                                  onClick={() => setAlmCalc({...almCalc, currentOp: Math.min(10, (parseInt(almCalc.currentOp) || 0) + 1).toString()})}
+                                  className="w-8 h-8 bg-gray-800 rounded-lg hover:bg-gray-700"
+                                >+</button>
+                              </div>
+                            </div>
+
+                            <div className="text-2xl text-gray-600">→</div>
+
+                            <div className="text-center">
+                              <div className="text-xs text-gray-500 mb-1">Я в очереди</div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setAlmCalc({...almCalc, myOp: Math.max(1, (parseInt(almCalc.myOp) || 1) - 1).toString()})}
+                                  className="w-8 h-8 bg-gray-800 rounded-lg hover:bg-gray-700"
+                                >−</button>
+                                <div className="w-12 h-12 bg-orange-900/50 border-2 border-orange-500 rounded-xl flex items-center justify-center text-2xl font-bold text-orange-300">
+                                  {almCalc.myOp || '?'}
+                                </div>
+                                <button
+                                  onClick={() => setAlmCalc({...almCalc, myOp: Math.min(10, (parseInt(almCalc.myOp) || 0) + 1).toString()})}
+                                  className="w-8 h-8 bg-gray-800 rounded-lg hover:bg-gray-700"
+                                >+</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Result */}
+                        {almCalc.myOp && almCalc.currentOp && (() => {
+                          const myOp = parseInt(almCalc.myOp);
+                          const currentOp = parseInt(almCalc.currentOp);
+
+                          // Сколько полных операций нужно дождаться
+                          // Если идёт 1-я, а я 3-й: жду конец 1-й + всю 2-ю = ~1.5 операции
+                          const opsToWait = myOp - currentOp;
+
+                          if (opsToWait <= 0) {
+                            return (
+                              <div className="bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-600 rounded-xl p-4 text-center">
+                                <div className="text-4xl mb-2">🚨</div>
+                                <div className="text-xl font-bold text-green-300">Твоя очередь!</div>
+                                <div className="text-sm text-green-400 mt-1">Готовься к операции</div>
+                              </div>
+                            );
+                          }
+
+                          // Реальные тайминги:
+                          // - текущая ОП уже идёт, осталось ~30-60 мин
+                          // - каждая следующая ~60-120 мин
+                          const currentOpRemaining = { min: 30, max: 60 }; // остаток текущей
+                          const perOp = { min: 60, max: 120 }; // на каждую полную ОП
+
+                          const fullOpsToWait = Math.max(0, opsToWait - 1);
+                          const minWait = currentOpRemaining.min + fullOpsToWait * perOp.min;
+                          const maxWait = currentOpRemaining.max + fullOpsToWait * perOp.max;
+                          const avgWait = Math.round((minWait + maxWait) / 2);
+
+                          const formatDuration = (mins) => {
+                            if (mins < 60) return `${mins} мин`;
+                            const h = Math.floor(mins / 60);
+                            const m = mins % 60;
+                            if (m === 0) return `${h} ч`;
+                            return `${h} ч ${m} мин`;
+                          };
+
+                          // Визуальная шкала очереди
+                          const queueVisual = [];
+                          for (let i = 1; i <= Math.max(myOp, 5); i++) {
+                            queueVisual.push(
+                              <div
+                                key={i}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                  i < currentOp ? 'bg-gray-700 text-gray-500' :
+                                  i === currentOp ? 'bg-red-600 text-white animate-pulse' :
+                                  i === myOp ? 'bg-orange-500 text-white ring-2 ring-orange-300' :
+                                  i < myOp ? 'bg-gray-600 text-gray-300' :
+                                  'bg-gray-800 text-gray-600'
+                                }`}
+                              >
+                                {i}
+                              </div>
+                            );
+                          }
+
+                          // Рекомендации по интенсивности
+                          let tasks = [];
+                          let intensity = '';
+                          let intensityLabel = '';
+
+                          if (opsToWait === 1) {
+                            // Следующий = я, осталось 30-60 мин
+                            intensity = 'urgent';
+                            intensityLabel = 'Скоро вызовут!';
+                            tasks = ['Телефон в руке', 'Никаких задач', 'Быть готовым'];
+                          } else if (avgWait <= 75) {
+                            // ~1ч окно
+                            intensity = 'low';
+                            intensityLabel = 'Мало времени';
+                            tasks = ['Быстрые ответы в чатах', 'Проверить почту', 'Не углубляться'];
+                          } else if (avgWait <= 150) {
+                            // ~1.5-2ч окно
+                            intensity = 'medium';
+                            intensityLabel = 'Есть окно';
+                            tasks = ['Inbox zero', 'Мелкие задачи', 'Чтение статей', 'Голосовые'];
+                          } else {
+                            // 2.5ч+ окно
+                            intensity = 'high';
+                            intensityLabel = 'Большое окно';
+                            tasks = ['Можно ноутбук', 'Реактивные задачи', 'Документы', 'НЕ глубокая работа!'];
+                          }
+
+                          return (
+                            <div className="space-y-3">
+                              {/* Визуальная очередь */}
+                              <div className="flex items-center justify-center gap-1 py-2">
+                                {queueVisual}
+                              </div>
+
+                              {/* Главная карточка результата */}
+                              <div className={`rounded-xl p-4 ${
+                                intensity === 'urgent' ? 'bg-gradient-to-r from-red-900/50 to-orange-900/50 border border-red-600' :
+                                intensity === 'low' ? 'bg-gradient-to-r from-yellow-900/40 to-orange-900/40 border border-yellow-700' :
+                                intensity === 'medium' ? 'bg-gradient-to-r from-blue-900/40 to-cyan-900/40 border border-blue-700' :
+                                'bg-gradient-to-r from-green-900/40 to-teal-900/40 border border-green-700'
+                              }`}>
+                                <div className="flex items-center justify-between mb-3">
+                                  <div>
+                                    <div className="text-xs text-gray-400">До тебя</div>
+                                    <div className="text-3xl font-bold">{opsToWait} {opsToWait === 1 ? 'операция' : opsToWait < 5 ? 'операции' : 'операций'}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-xs text-gray-400">Ожидание</div>
+                                    <div className="text-lg font-medium">~{formatDuration(avgWait)}</div>
+                                    <div className="text-xs text-gray-500">{formatDuration(minWait)} – {formatDuration(maxWait)}</div>
+                                  </div>
+                                </div>
+
+                                <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                  intensity === 'urgent' ? 'bg-red-600 text-white' :
+                                  intensity === 'low' ? 'bg-yellow-600 text-white' :
+                                  intensity === 'medium' ? 'bg-blue-600 text-white' :
+                                  'bg-green-600 text-white'
+                                }`}>
+                                  {intensityLabel}
+                                </div>
+                              </div>
+
+                              {/* Что делать */}
+                              <div className="bg-gray-900 rounded-lg p-3">
+                                <div className="text-xs text-gray-500 mb-2">Что можно делать:</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {tasks.map((task, i) => (
+                                    <span key={i} className={`px-2 py-1 rounded text-xs ${
+                                      task.includes('НЕ') || task.includes('Никаких')
+                                        ? 'bg-red-900/50 text-red-300'
+                                        : 'bg-gray-800 text-gray-300'
+                                    }`}>
+                                      {task}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Предупреждение */}
+                              {intensity !== 'urgent' && (
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <span>⚠️</span>
+                                  <span>Могут вызвать раньше — держи телефон рядом</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Подсказка если не заполнено */}
+                        {(!almCalc.myOp || !almCalc.currentOp) && (
+                          <div className="text-center text-sm text-gray-500 py-2">
+                            Укажи номера операций выше
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Мотивационная цитата */}
                   <div className="bg-gray-800/50 rounded-xl p-3 text-center">
                     <div className="text-sm text-gray-500 italic">
@@ -1274,6 +1758,7 @@
                   {TIME_SLOTS.map((slot) => (
                     <div key={slot.hour} className={`flex items-center justify-end pr-0.5 ${
                       slot.isMidnight ? 'text-indigo-400 font-bold' :
+                      slot.isNight ? 'text-indigo-400' :
                       slot.hour < 7 ? 'text-gray-600' :
                       slot.isHalf ? 'text-gray-800' : 'text-gray-500'
                     }`} style={{ height: SLOT_HEIGHT, fontSize: '7px' }}>
